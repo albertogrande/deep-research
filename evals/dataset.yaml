@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=dataset_schema.json
+name: deepresearch-v1
+cases:
+- name: factual-lookup
+  inputs: When did the EU AI Act enter into force, and when do its GPAI obligations
+    start to apply?
+  metadata:
+    category: factual
+    notes: checkable dates; official sources exist
+  expected_output: null
+  evaluators: []
+- name: multi-hop-comparison
+  inputs: Compare the pricing and context windows of the current Anthropic and OpenAI
+    flagship models.
+  metadata:
+    category: multi-hop
+    notes: requires combining two vendors' current docs
+  expected_output: null
+  evaluators: []
+- name: recent-events
+  inputs: What were the major announcements at the most recent Apple WWDC?
+  metadata:
+    category: time-sensitive
+    notes: freshness matters; date anchoring
+  expected_output: null
+  evaluators: []
+- name: numeric-statistical
+  inputs: What is the current global installed solar PV capacity and how fast is it
+    growing year over year?
+  metadata:
+    category: numeric
+    notes: numbers must be cited and hedged appropriately
+  expected_output: null
+  evaluators: []
+- name: contested-topic
+  inputs: What does the current evidence say about the health effects of moderate
+    alcohol consumption?
+  metadata:
+    category: contested
+    notes: multiple sides without false balance
+  expected_output: null
+  evaluators: []
+- name: niche-technical
+  inputs: How does PostgreSQL's MVCC handle transaction ID wraparound, and what operational
+    safeguards exist?
+  metadata:
+    category: technical
+    notes: depth over breadth; docs are primary source
+  expected_output: null
+  evaluators: []
+- name: broad-survey
+  inputs: What are the main approaches to detecting hallucinations in large language
+    model outputs?
+  metadata:
+    category: survey
+    notes: coverage of distinct method families
+  expected_output: null
+  evaluators: []
+- name: false-premise
+  inputs: Why did Python 4 remove the GIL?
+  metadata:
+    category: false-premise
+    notes: there is no Python 4; free-threading landed in 3.13+. Report must correct
+      the premise
+  expected_output: null
+  evaluators: []
+evaluators: []
+report_evaluators: []

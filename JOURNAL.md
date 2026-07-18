@@ -10,6 +10,55 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 7 — 2026-07-18 — Phase 6: evals, and the v1 retrospective
+
+**Built:** the 8-case eval dataset (YAML, round-tripped through `Dataset.to_file`/`from_file`),
+five custom objective evaluators + three LLM judges, the verifier on/off A/B experiment script,
+evaluator unit tests (httpx MockTransport for URL resolution), gated live smoke tests, README,
+LICENSE. Suite: 47 offline tests, 0 API calls, ~1.5s.
+
+**Learnings & dev-ex notes (Pydantic Evals):**
+
+- **Custom evaluators are just dataclasses returning dicts** — `{"citation_coverage": 0.83}` —
+  and can be sync or async. Friction was near zero; the whole objective suite was an hour of
+  work. Returning `{}` for "not applicable" (e.g. verified-claim-rate on a no-verify run) is a
+  clean convention.
+- **The LLMJudge OpenAI-default trap is real**: `LLMJudge(...)` with no `model=` would crash
+  every eval run in this OpenAI-keyless project — at runtime, not import time. Every judge here
+  sets `model=` explicitly, and `judge_model()` respects the routing setting. Also note the
+  `score`/`assertion` config is a TypedDict (`OutputConfig`) — `score={"evaluation_name":
+  "faithfulness"}, assertion=False` gives a named 0–1 score instead of a pass/fail.
+- **Designing the task's return type around evaluators pays off.** The eval task returns
+  `EvalOutput{report_markdown, record: RunRecord}` — the audit trail we already write. No
+  span-mining, no scraping stdout: evaluators read typed data. The run.json investment from
+  Phase 1 became the eval substrate for free.
+- `Dataset(...)` requires `name=` in this version — minor, but another docs-drift catch.
+- Evaluator ideas that earn their place: **unsupported-leakage** (assert excluded claims
+  really are absent from the report) and **unverifiable-rate** (measures how much of the web
+  the verifier can actually reach — the paywall reality check).
+
+**Retrospective — what the weekend proved about the stack:**
+
+1. **Pydantic AI** is genuinely productive: model-less agent singletons + per-run `model=`,
+   output validators with ModelRetry, and `Agent.override` made a 5-agent pipeline fully
+   offline-testable. Wishlist: subscription (Claude Max) billing support; a documented way to
+   pass per-run context to output validators; TestModel support for built-in tools.
+2. **The architecture decisions that mattered most**: policy-in-orchestrator (agents stay
+   dumb), code-owned citations, deterministic budget, degradation-over-death everywhere.
+3. **Still unproven without keys** (the honest list): server-tools-through-gateway (spike
+   ready), real citation quality from Haiku researchers, the true unverifiable rate, real
+   costs vs. the estimator, Logfire trace ergonomics at depth, and the headline question —
+   does the verifier measurably improve faithfulness? Every one of these has a script or eval
+   waiting; first keyed session should run: spike → one standard run → `-m evals.run_evals` →
+   `-m evals.experiments.verifier_ab`, then paste numbers into README and journal the verdict.
+
+**v1 cuts, accepted knowingly:** no resume/checkpointing; exact-match dedup; sequential
+sections; stage-level streaming; env-only per-role model overrides; cache-blind cost model;
+online evals not wired (pydantic_evals.online exists — natural v2, feeding production traces
+back into the dataset).
+
+---
+
 ## Entry 6 — 2026-07-18 — Phase 5: the product surface — live UI and an exit-code contract
 
 **Built:** Rich Live progress renderer (header panel, per-wave researcher trees, verification

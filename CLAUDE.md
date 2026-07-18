@@ -32,7 +32,8 @@ history in old entries — corrections go in new entries.
 - `uv run deepresearch "question" --depth quick|standard|deep` — a research run.
 - `uv run python scripts/spike_gateway_server_tools.py` — verify server-side web tools work
   through the Gateway (run once per new environment; record the answer in the journal).
-- `uv run python evals/run_evals.py` — eval suite (costs ~$2.50; never wire into CI).
+- `uv run python -m evals.run_evals` — eval suite (costs ~$2.50; never wire into CI).
+- `uv run python -m evals.experiments.verifier_ab` — the verifier on/off A/B (~$5).
 
 ## Environment
 
