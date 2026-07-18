@@ -10,6 +10,44 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 2 — 2026-07-18 — Phase 1: plan → research pipeline, and testing agents without keys
+
+**Built:** the domain vocabulary (`models.py`), per-role usage ledger + budget (`deps.py`),
+planner and researcher agents, single-wave orchestrator, plain-progress CLI, run.json writer,
+and a 19-test offline suite.
+
+**Learnings & dev-ex notes:**
+
+- **`TestModel` refuses agents that carry server-side tools** — `UserError: TestModel does not
+  support built-in tools`. The escape hatch is that `Agent.override()` accepts `native_tools=`,
+  so tests strip them: `agent.override(model=TestModel(...), native_tools=[])`. Undocumented in
+  any tutorial I saw; found by reading the `override` signature. This is THE pattern for
+  offline-testing researcher-style agents.
+- **`result.usage` is an attribute in pydantic-ai 2.13, not a method.** Older docs/examples say
+  `result.usage()`. Caught it in the first smoke run; fixed the spike script.
+- **Model-less agent singletons work beautifully.** `Agent(output_type=..., deps_type=...)`
+  with no model + `agent.run(..., model=resolve_model(role, settings))` at the call site keeps
+  routing entirely in config. `Agent.override(model=...)` still wins in tests, which is exactly
+  the right precedence.
+- **Dynamic instructions via `@agent.instructions` + `RunContext[Deps]`** make profile-aware
+  prompts trivial (sub-question bounds, today's date, search budget all injected from deps).
+- **`pydantic_ai.models.ALLOW_MODEL_REQUESTS = False`** is a great belt-and-braces switch —
+  any test that accidentally reaches for a real provider raises instead of spending money.
+- Output validators + `ModelRetry` give a clean home for the "every claim needs a real quote
+  and URL" rule — semantic validation lives next to the agent, policy stays in the orchestrator.
+
+**Issues / decisions:**
+
+- **Search costs can't be counted exactly offline.** Whether the SDK surfaces per-run
+  web-search counts in `usage.details` is unverifiable without keys, so the ledger records a
+  conservative upper bound (max_uses per researcher run) and `_reconcile_searches()` replaces
+  it with real provider counters when present. Over-estimating cost is the safe direction for
+  a budget guard. To re-check on first live run.
+- `tests/` needed an `__init__.py` for cross-module fixture imports — pytest's rootdir munging
+  strikes again.
+
+---
+
 ## Entry 1 — 2026-07-18 — Phase 0: scaffold, API verification, and the keyless-sandbox reality
 
 **Built:** repo scaffold with uv (`uv init --package`), full dependency set, config/telemetry

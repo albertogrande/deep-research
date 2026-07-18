@@ -43,7 +43,7 @@ async def try_leg(label: str, model: str) -> bool:
     except Exception as e:  # noqa: BLE001 — a spike wants the raw failure, whatever it is
         print(f"FAILED: {type(e).__name__}: {e}")
         return False
-    usage = result.usage()
+    usage = result.usage
     print(f"OK: {result.output!r}")
     print(f"usage: requests={usage.requests} in={usage.input_tokens} out={usage.output_tokens}")
     details = getattr(usage, "details", None) or {}
