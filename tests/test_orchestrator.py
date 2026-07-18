@@ -30,7 +30,7 @@ async def test_single_wave_run(settings, planner_model, researcher_model):
     assert record.claims[0].date_accessed  # stamped by code
     assert record.waves_run == 1
     assert not record.failed_sub_questions
-    assert set(record.usage) == {"planner", "researcher"}
+    assert {"planner", "researcher"} <= set(record.usage)
     assert record.usage["researcher"].requests >= 2
 
     run_json = json.loads((result.run_dir / "run.json").read_text())

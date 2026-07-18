@@ -10,6 +10,36 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 5 — 2026-07-18 — Phase 4: synthesis — models write prose, code owns the numbers
+
+**Built:** two-stage synthesizer (outline agent → per-section agent), code-built citation map,
+report assembly, claims-dump fallback artifact, golden-file rendering test; full pipeline now
+runs end-to-end offline (35 tests).
+
+**Learnings & dev-ex notes:**
+
+- **The "models write prose, code owns structure" split is the best decision in the codebase.**
+  Citation numbers are assigned by `build_citation_map` and injected into section prompts as
+  fixed `[n]` markers; the References block, Limitations section, TL;DR quote, and headings are
+  all assembled by code. Numbering physically cannot drift, and the golden-file test locks the
+  format byte-for-byte.
+- **Passing per-run data to output validators required a small hack worth knowing:** validators
+  see only `ctx.deps`, so the orchestrator stashes `outline_valid_claim_ids` /
+  `outline_required_claim_ids` on the (mutable, run-scoped) Deps dataclass right before the
+  outline run. Works cleanly because Deps is per-run, but it's implicit coupling — an
+  `Agent.run(context=...)` kwarg would be nicer. Dev-ex wishlist item for pydantic-ai.
+- The outline validator's "≤30% of supported claims may go unassigned" rule is the mirror image
+  of hallucination control: it stops the model from *dropping* evidence, while the unknown-id
+  check stops it from *inventing* evidence.
+- **Failure economics:** synthesis failure downgrades to a claims-dump artifact (still cited,
+  still grouped) instead of losing the run — research money is never thrown away. Spend-cap
+  aborts write the same fallback before re-raising.
+
+**Limitation accepted:** sections are written sequentially (simpler citation bookkeeping,
+better Logfire readability); parallel section writing is a v2 optimization.
+
+---
+
 ## Entry 4 — 2026-07-18 — Phase 3: the verifier — trust nothing, degrade everything
 
 **Built:** per-source verifier agent (WebFetchTool, `max_uses=2`), `group_claims_by_url`

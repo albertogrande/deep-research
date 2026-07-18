@@ -86,3 +86,7 @@ class Deps:
     ledger: UsageLedger
     run_id: str
     today: str  # ISO date; injected into prompts and stamped on claims
+
+    # Set by the orchestrator just before the outline run; consumed by its output validator.
+    outline_valid_claim_ids: frozenset[str] = frozenset()
+    outline_required_claim_ids: frozenset[str] = frozenset()

@@ -164,6 +164,7 @@ class RunRecord(BaseModel):
     timings: dict[str, float] = Field(default_factory=dict)  # phase -> seconds
     waves_run: int = 0
     saturated: bool = False
+    synthesis_ok: bool = True
     final_coverage: list[SubQuestionCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     report_path: str | None = None

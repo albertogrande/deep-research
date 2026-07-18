@@ -1,4 +1,4 @@
-"""Pure functions between pipeline stages: identity assignment, dedup, digests.
+"""Pure functions between pipeline stages: identity assignment, dedup, digests, citations.
 
 No model calls, no I/O — everything here is trivially unit-testable.
 """
@@ -6,9 +6,10 @@ No model calls, no I/O — everything here is trivially unit-testable.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from .models import Claim, PlannedSubQuestion, RawClaim, SubQuestion
+from .models import Claim, OutlineSection, PlannedSubQuestion, RawClaim, SubQuestion, Verdict
 
 _INTERROGATIVE_PREFIX = re.compile(
     r"^(what|which|who|whom|whose|when|where|why|how)\s+"
@@ -60,6 +61,87 @@ def dedup_questions(planned: list[PlannedSubQuestion], seen_normalized: set[str]
             seen_normalized.add(key)
             fresh.append(p)
     return fresh
+
+
+@dataclass(frozen=True)
+class CitationEntry:
+    number: int
+    url: str  # first original URL seen for this canonical source
+    title: str
+
+
+@dataclass(frozen=True)
+class CitationMap:
+    """Stable numbering of sources, built by code — models never invent citation numbers."""
+
+    entries: tuple[CitationEntry, ...]
+    number_by_canonical: dict[str, int]
+
+    def number_for(self, claim: Claim) -> int:
+        return self.number_by_canonical[canonical_url(claim.source_url)]
+
+
+def build_citation_map(claims: list[Claim]) -> CitationMap:
+    """Number sources by first appearance in the (ordered) claim list."""
+    entries: list[CitationEntry] = []
+    number_by_canonical: dict[str, int] = {}
+    for c in claims:
+        canon = canonical_url(c.source_url)
+        if canon not in number_by_canonical:
+            number = len(entries) + 1
+            number_by_canonical[canon] = number
+            entries.append(CitationEntry(number=number, url=c.source_url, title=c.source_title))
+    return CitationMap(entries=tuple(entries), number_by_canonical=number_by_canonical)
+
+
+def outline_digest(
+    query: str,
+    done_criteria: list[str],
+    sub_questions: list[SubQuestion],
+    claims: list[Claim],
+    verdict_by_claim: dict[str, Verdict],
+) -> str:
+    """What the outline agent sees: id, statement, verdict, source title — no quotes."""
+    by_sq: dict[str, list[Claim]] = {}
+    for c in claims:
+        by_sq.setdefault(c.sub_question_id, []).append(c)
+
+    lines = [f"MAIN QUESTION: {query}", "", "DONE CRITERIA:"]
+    lines += [f"- {d}" for d in done_criteria]
+    lines += ["", "VERIFIED CLAIMS (grouped by sub-question):"]
+    for sq in sub_questions:
+        sq_claims = by_sq.get(sq.id, [])
+        if not sq_claims:
+            continue
+        lines.append(f"\n{sq.id}: {sq.question}")
+        for c in sq_claims:
+            verdict = verdict_by_claim[c.id].verdict if c.id in verdict_by_claim else "unverified"
+            lines.append(f"  - {c.id} [{verdict}] {c.statement} (source: {c.source_title})")
+    return "\n".join(lines)
+
+
+def section_prompt(
+    section: OutlineSection,
+    claims: list[Claim],
+    citations: CitationMap,
+    verdict_by_claim: dict[str, Verdict],
+) -> str:
+    """What a section-writer sees: this section's full claim records + fixed citation numbers."""
+    lines = [
+        f"SECTION TITLE: {section.title}",
+        f"SECTION GOAL: {section.goal}",
+        "",
+        "CLAIMS FOR THIS SECTION (cite with the given [n]; use ONLY these claims):",
+    ]
+    for c in claims:
+        verdict = verdict_by_claim[c.id].verdict if c.id in verdict_by_claim else "unverified"
+        n = citations.number_for(c)
+        lines.append(f"\n{c.id} -> cite as [{n}]{'†' if verdict == 'unverifiable' else ''}")
+        lines.append(f"  verdict: {verdict}")
+        lines.append(f"  statement: {c.statement}")
+        lines.append(f'  quote: "{c.supporting_quote}"')
+        lines.append(f"  source: {c.source_title}")
+    return "\n".join(lines)
 
 
 def group_claims_by_url(claims: list[Claim]) -> dict[str, list[Claim]]:

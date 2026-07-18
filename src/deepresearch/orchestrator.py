@@ -1,7 +1,8 @@
 """Pipeline orchestration: sequencing, concurrency, budget, and error policy live HERE.
 
-Phase 2 scope: plan → wave loop (research → gap analysis → follow-ups, until saturated,
-out of waves, or out of budget). Verification and synthesis arrive in Phases 3-4.
+Full pipeline: plan → wave loop (research → gap analysis → follow-ups until saturated/out of
+waves/out of budget) → per-source verification → two-stage synthesis → report.md + run.json.
+Every stage degrades rather than dying; synthesis is always attempted when claims exist.
 """
 
 from __future__ import annotations
@@ -26,16 +27,27 @@ from pydantic_ai.exceptions import (
 from .agents.gap_analyst import MAX_FOLLOW_UPS, gap_analyst_agent
 from .agents.planner import planner_agent
 from .agents.researcher import researcher_agent
+from .agents.synthesizer import outline_agent, section_agent
 from .agents.verifier import verifier_agent, verify_prompt
-from .artifacts import create_run_dir, new_run_id, write_run_record
+from .artifacts import (
+    assemble_report,
+    claims_dump_report,
+    create_run_dir,
+    new_run_id,
+    write_report,
+    write_run_record,
+)
 from .config import Role, Settings, resolve_model
 from .deps import Budget, BudgetExceeded, Deps, UsageLedger
 from .digest import (
     assign_sub_question_ids,
+    build_citation_map,
     dedup_questions,
     enrich_and_dedup_claims,
     gap_digest,
     group_claims_by_url,
+    outline_digest,
+    section_prompt,
 )
 from .models import (
     Claim,
@@ -54,6 +66,7 @@ from .progress import (
     ResearcherFailed,
     ResearcherFinished,
     ResearcherStarted,
+    SynthesisStage,
     VerificationProgress,
     WaveStarted,
 )
@@ -65,6 +78,8 @@ PLANNER_LIMITS = UsageLimits(request_limit=5)
 RESEARCHER_LIMITS = UsageLimits(request_limit=12, total_tokens_limit=120_000)
 GAP_LIMITS = UsageLimits(request_limit=5)
 VERIFIER_LIMITS = UsageLimits(request_limit=6, total_tokens_limit=60_000)
+OUTLINE_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=60_000)
+SECTION_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=40_000)
 
 VERIFY_CONCURRENCY = 4
 # Skip verification when less than this fraction of budget remains — synthesis is the payoff
@@ -165,14 +180,25 @@ async def run_research(
     timings: dict[str, float] = {}
     state = _RunState()
 
+    report_path: Path | None = None
     try:
         with logfire.span("research run", query=query, profile=settings.profile, run_id=run_id):
-            plan = await _plan_stage(query, deps, record, timings, emit)
-            state.sub_questions = assign_sub_question_ids(
-                dedup_questions(plan.sub_questions, state.seen_questions), wave=1
-            )
-            await _wave_loop(query, plan.done_criteria, deps, record, state, timings, emit)
-            await _verification_stage(deps, record, state, timings, emit)
+            try:
+                plan = await _plan_stage(query, deps, record, timings, emit)
+                state.sub_questions = assign_sub_question_ids(
+                    dedup_questions(plan.sub_questions, state.seen_questions), wave=1
+                )
+                await _wave_loop(query, plan.done_criteria, deps, record, state, timings, emit)
+                await _verification_stage(deps, record, state, timings, emit)
+            except BudgetFatalError:
+                # Research aborted mid-flight; leave the best artifact we can, then surface it.
+                record.synthesis_ok = False
+                report_path = _write_fallback(
+                    query, deps, record, state, run_dir, reason="aborted: provider/gateway spend refusal"
+                )
+                raise
+            report_path = await _synthesis_stage(query, deps, record, state, run_dir, timings, emit)
+            emit(CostUpdate(deps.budget.estimate(deps.ledger), deps.budget.max_cost_usd))
     finally:
         # Always flush the audit trail — including on errors and Ctrl-C.
         _reconcile_searches(ledger)
@@ -185,7 +211,7 @@ async def run_research(
         record.timings = {k: round(v, 2) for k, v in timings.items()}
         write_run_record(record, run_dir)
 
-    return RunResult(record=record, run_dir=run_dir)
+    return RunResult(record=record, run_dir=run_dir, report_path=report_path)
 
 
 async def _plan_stage(query, deps: Deps, record: RunRecord, timings, emit):
@@ -381,6 +407,101 @@ async def _verification_stage(deps: Deps, record: RunRecord, state: _RunState, t
             f"{unverifiable} of {len(record.verdicts)} claims could not be re-verified "
             "(fetch failures, paywalls, or missing verdicts)"
         )
+
+
+def _usable_claims(state: _RunState, record: RunRecord) -> tuple[list[Claim], dict[str, Verdict]]:
+    """Claims eligible for the report: everything except source-contradicted (unsupported)."""
+    verdict_by_claim = {v.claim_id: v for v in record.verdicts}
+    excluded = {cid for cid, v in verdict_by_claim.items() if v.verdict == "unsupported"}
+    usable = [c for c in state.claims if c.id not in excluded]
+    note = f"{len(excluded)} claim(s) contradicted by their cited sources were excluded from the report"
+    if excluded and note not in state.limitations:  # idempotent: may be called twice on failure paths
+        state.limitations.append(note)
+    return usable, verdict_by_claim
+
+
+def _write_fallback(
+    query: str, deps: Deps, record: RunRecord, state: _RunState, run_dir: Path, reason: str
+) -> Path | None:
+    if not state.claims:
+        return None
+    usable, verdict_by_claim = _usable_claims(state, record)
+    if not usable:
+        return None
+    citations = build_citation_map(usable)
+    report = claims_dump_report(
+        query, state.sub_questions, usable, verdict_by_claim, citations, state.limitations, deps.today, reason
+    )
+    path = write_report(report, run_dir)
+    record.report_path = str(path)
+    return path
+
+
+async def _synthesis_stage(
+    query: str, deps: Deps, record: RunRecord, state: _RunState, run_dir: Path, timings, emit
+) -> Path | None:
+    """Always attempted (it is the payoff); degrades to a claims-dump artifact on failure."""
+    settings = deps.settings
+    usable, verdict_by_claim = _usable_claims(state, record)
+    if not usable:
+        state.limitations.append("no usable claims gathered; no report generated")
+        return None
+
+    citations = build_citation_map(usable)
+    unverifiable_count = sum(
+        1 for c in usable if verdict_by_claim.get(c.id) and verdict_by_claim[c.id].verdict == "unverifiable"
+    )
+    done_criteria = list(record.plan.done_criteria) if record.plan else []
+    t0 = time.perf_counter()
+    try:
+        with logfire.span("synthesis", sections="tbd", claims=len(usable)):
+            deps.outline_valid_claim_ids = frozenset(c.id for c in usable)
+            deps.outline_required_claim_ids = frozenset(
+                c.id
+                for c in usable
+                if verdict_by_claim.get(c.id) and verdict_by_claim[c.id].verdict == "supported"
+            )
+            emit(SynthesisStage("outline"))
+            outline_run = await outline_agent.run(
+                outline_digest(query, done_criteria, state.sub_questions, usable, verdict_by_claim),
+                deps=deps,
+                model=resolve_model("synthesizer", settings),
+                usage=deps.ledger.usage_for("synthesizer"),
+                usage_limits=OUTLINE_LIMITS,
+            )
+            outline = outline_run.output
+
+            claims_by_id = {c.id: c for c in usable}
+            bodies: list[str] = []
+            for i, section in enumerate(outline.sections, start=1):
+                emit(SynthesisStage("section", i, len(outline.sections)))
+                section_claims = [claims_by_id[cid] for cid in section.claim_ids if cid in claims_by_id]
+                section_run = await section_agent.run(
+                    section_prompt(section, section_claims, citations, verdict_by_claim),
+                    deps=deps,
+                    model=resolve_model("synthesizer", settings),
+                    usage=deps.ledger.usage_for("synthesizer"),
+                    usage_limits=SECTION_LIMITS,
+                )
+                bodies.append(section_run.output.markdown)
+        report = assemble_report(
+            outline, bodies, citations, state.limitations, deps.today, unverifiable_count
+        )
+    except Exception as e:
+        if classify_error(e) is ErrorClass.BUDGET_FATAL:
+            record.synthesis_ok = False
+            raise BudgetFatalError(str(e)) from e
+        record.synthesis_ok = False
+        state.limitations.append(f"report synthesis failed ({type(e).__name__}); wrote claims dump instead")
+        return _write_fallback(
+            query, deps, record, state, run_dir, reason=f"synthesis failed: {type(e).__name__}"
+        )
+    finally:
+        timings["synthesis"] = time.perf_counter() - t0
+
+    path = write_report(report, run_dir)
+    record.report_path = str(path)
+    return path
 
 
 def _record_failure(record: RunRecord, state: _RunState, sq: SubQuestion, e: BaseException, emit) -> None:
