@@ -1,0 +1,102 @@
+# Builder Journal — deepresearch
+
+A running log of learnings, insights, issues, limitations, and developer-experience notes
+from building a deep research agent system on the full Pydantic stack (Pydantic AI, Logfire,
+Pydantic Evals, Pydantic AI Gateway). Newest entries at the top; entry 0 (the origin story)
+stays at the bottom.
+
+Convention: every working session appends an entry before pushing — what was built, what was
+learned, what broke, what the stack made easy or hard, and what it cost.
+
+---
+
+## Entry 1 — 2026-07-18 — Phase 0: scaffold, API verification, and the keyless-sandbox reality
+
+**Built:** repo scaffold with uv (`uv init --package`), full dependency set, config/telemetry
+modules, the gateway spike script, this journal, and CLAUDE.md.
+
+**Learnings & dev-ex notes:**
+
+- **The docs were ahead of most tutorials, and the installed reality matched the docs.** Web
+  research (against pydantic.dev, July 2026) warned that built-in tools moved from a
+  `builtin_tools=` argument to `capabilities=[NativeTool(...)]`. Verified against installed
+  `pydantic-ai-slim==2.13.0`: `from pydantic_ai.capabilities import NativeTool` works,
+  `Agent(..., capabilities=...)` exists, and `WebSearchTool`/`WebFetchTool` expose exactly the
+  documented params (`max_uses`, `allowed_domains`/`blocked_domains`, `enable_citations`,
+  `max_content_tokens`). Lesson for anyone building on this stack: **verify the API surface
+  against the installed package before writing code** — the ecosystem moves monthly and stale
+  blog posts are the norm.
+- **One-command environment.** `uv init --package` + two `uv add` lines gave a working src-layout
+  package with locked deps in under a minute. Nothing to configure. This part of the Python
+  story is now genuinely great.
+- **`pydantic-ai-slim[anthropic,logfire]` is the right install** for an Anthropic-only project —
+  the fat `pydantic-ai` package pulls every provider SDK you don't need.
+- **LLMJudge trap confirmed in source**: `pydantic_evals`' `LLMJudge` defaults to an OpenAI judge
+  model. With no OpenAI key in this project, every judge must set
+  `model='gateway/anthropic:...'` explicitly or evals will hard-fail at runtime.
+
+**Issues / limitations hit:**
+
+- **The build sandbox has no API keys** (no `ANTHROPIC_API_KEY`, no `LOGFIRE_TOKEN`, no gateway
+  key). Consequence: everything in v1 is developed against `TestModel`/`FunctionModel` offline;
+  the two live questions — "do Anthropic server-side web tools work through the Gateway proxy?"
+  and "what does a real run cost?" — are packaged as a ready-to-run spike
+  (`scripts/spike_gateway_server_tools.py`) for the first keyed environment. The architecture
+  hedges: a `routing = gateway | direct | split` setting isolates the answer to one env var.
+- Sonnet 5's intro pricing ($2/$10 per MTok) expires 2026-08-31; the `PRICING` table in
+  `config.py` carries a dated comment so cost estimates don't silently drift.
+
+---
+
+## Entry 0 — 2026-07-18 — Origin story: how this project started
+
+This project began as a casual question in a Claude Code session — the user wanted a weekend
+project to learn the modern Pydantic platform, and the idea sharpened over a few rounds of
+pushback. The (verbatim, typos and all) prompts that shaped it:
+
+1. The opening ask:
+   > "If you were a dev that wants to test pydantic ai full stack ver the weekens
+   > Which projwtc woils you create? Gibe me 3 ideas"
+
+2. Scoping to the current Pydantic platform:
+   > "It shouls covwr the lawst pydanrix stack primarly ai, logfire, evals and gateway"
+
+3. Grounding in reality (this prompted a live fetch of pydantic.dev):
+   > "Fetch pydanrix.dev and get the lawst contezt"
+
+4. Raising the ambition past RAG demos:
+   > "Somehtingmore agwntic? More interesring that qa rag"
+
+5. The cost constraint era — initially Claude Max only, no extra services:
+   > "I want somejting that onlynneeds my claude max account and pudantix token
+   > No edtra services like aupabase ornotjer paid tools"
+
+   (Research verdict: Pydantic AI can't bill to a Claude Max subscription and the Gateway needs
+   a provider key, so the constraint was relaxed:)
+   > "Ok we can ise anthopoc api key - what could we build"
+
+6. The decisive pivot — a "Bug Hunter" agent benchmarked on seeded bugs was on the table, and
+   the user killed it in favor of something real:
+   > "Dont love it indont wamt to fake anyhtijg to test i
+   > I wamt. Arela agent functinality
+   > Like deep reseaexh agents ot something like that somehting useful incan open aource"
+
+7. The commission, including this journal itself:
+   > "Create a plan to create a sota deep reseaexh system on the pydantic stack
+   > I also want you to keep a builder journal with all your learnjngs, insights,
+   > Issues , kimitations, dev ex, etc..
+   > Add to the jiirnal hownthis projwxt started, which wa sthen prompt"
+
+**Decisions locked at planning time** (via explicit Q&A): CLI-first interface; the name
+**`deepresearch`**; Pydantic AI Gateway wired in from day 1 (BYOK Anthropic key, spend caps).
+
+**The concept:** a wave-based deep research pipeline — Planner → parallel Researchers using
+Anthropic's server-side web search/fetch → Gap Analyst (iterate until saturated) → per-source
+claim Verifier → two-stage Synthesizer — typed with Pydantic models at every boundary, traced
+end-to-end in Logfire, measured with Pydantic Evals (including a verifier on/off A/B
+experiment), and routed through the Gateway with hard spend caps. Constraints: one Anthropic
+API key + one Pydantic (Logfire) account, no other services, local artifacts only.
+
+The interesting bet being tested: **claim-level adversarial verification is the differentiator**
+that most open-source deep-research clones skip — and the evals exist to prove (or refute) that
+it's worth its cost.

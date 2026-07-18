@@ -1,0 +1,18 @@
+# environment / secrets
+.env
+.logfire/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# research run outputs
+runs/
