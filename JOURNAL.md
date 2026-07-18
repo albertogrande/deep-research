@@ -10,6 +10,31 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 6 — 2026-07-18 — Phase 5: the product surface — live UI and an exit-code contract
+
+**Built:** Rich Live progress renderer (header panel, per-wave researcher trees, verification
+pass-rate line, synthesis status, cost ticker), plain/quiet/json output modes, and a tested
+exit-code contract: 0 ok · 1 fatal · 2 synthesis-fallback · 3 spend-refusal · 130 interrupted.
+
+**Learnings & dev-ex notes:**
+
+- **The UI-agnostic event callback earned its keep.** The orchestrator emits frozen dataclass
+  events; the Live renderer, the plain printer, and (later) eval harnesses are all just
+  different consumers. Zero orchestrator changes were needed to add the live UI.
+- Python 3.10+ `match`/`case` on frozen event dataclasses is a genuinely pleasant way to write
+  both renderers — pattern-matching with field capture reads like a spec.
+- **Exit codes are product API.** `--json` + documented exit codes make the CLI scriptable
+  (cron a research run, alert on exit 3 = spend cap). Locked with typer's CliRunner tests —
+  including the 402-spend-refusal path, scripted via a FunctionModel that raises
+  `ModelHTTPError(402)`.
+- Rich's `Live` needs care with agent SDKs that also print (console logging off in telemetry
+  was the right call in Phase 0 — no fighting over the terminal).
+
+**Still pending keys:** everything to date is offline-verified. The first live run will exercise
+streamed server-tool behavior, real Logfire traces, and true costs — journal entry to follow.
+
+---
+
 ## Entry 5 — 2026-07-18 — Phase 4: synthesis — models write prose, code owns the numbers
 
 **Built:** two-stage synthesizer (outline agent → per-section agent), code-built citation map,

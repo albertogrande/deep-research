@@ -1,4 +1,8 @@
-"""CLI: `deepresearch "question" [flags]`. Plain-line progress in Phase 1; Rich Live in Phase 5."""
+"""CLI: `deepresearch "question" [flags]` — Rich Live progress, artifact summary, exit codes.
+
+Exit codes: 0 ok · 1 fatal (no research possible) · 2 report fallback (synthesis failed) ·
+3 spend refusal (gateway/provider cap) · 130 interrupted.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +18,14 @@ from .config import PROFILES, Settings
 from .models import RunRecord
 from .progress import (
     CostUpdate,
+    LiveProgress,
     PlanReady,
     ProgressEvent,
     ResearcherFailed,
     ResearcherFinished,
     ResearcherStarted,
+    SynthesisStage,
+    VerificationProgress,
     WaveStarted,
 )
 
@@ -48,10 +55,8 @@ def _build_settings(
     return Settings(**overrides)  # init kwargs beat env vars beat .env
 
 
-def _plain_printer(quiet: bool) -> Callable[[ProgressEvent], None]:
+def _plain_printer() -> Callable[[ProgressEvent], None]:
     def emit(event: ProgressEvent) -> None:
-        if quiet:
-            return
         match event:
             case PlanReady(n_sub_questions=n):
                 err_console.print(f"[bold]plan[/bold]: {n} sub-questions")
@@ -63,25 +68,46 @@ def _plain_printer(quiet: bool) -> Callable[[ProgressEvent], None]:
                 err_console.print(f"  {sq_id} done: {n} claims")
             case ResearcherFailed(sub_question_id=sq_id, reason=r):
                 err_console.print(f"  [red]{sq_id} failed[/red]: {r}")
+            case VerificationProgress(done=d, total=t, pass_rate=p):
+                err_console.print(f"verification: {d}/{t} sources ({p:.0%} supported)")
+            case SynthesisStage(stage=stage, index=i, total=t):
+                msg = "outline" if stage == "outline" else f"section {i}/{t}"
+                err_console.print(f"synthesis: {msg}")
             case CostUpdate(estimate_usd=est, cap_usd=cap):
                 err_console.print(f"[dim]cost so far ≈ ${est:.2f} (cap ${cap:.2f})[/dim]")
 
     return emit
 
 
-def _print_summary(record: RunRecord) -> None:
-    table = Table(title=f"claims — {record.run_id}", show_lines=False)
-    table.add_column("id", style="dim")
-    table.add_column("statement", max_width=70)
-    table.add_column("source")
-    table.add_column("conf", justify="center")
-    for claim in record.claims:
-        table.add_row(claim.id, claim.statement, claim.source_url, claim.confidence)
+def _print_summary(record: RunRecord, report_path: str | None) -> None:
+    verdict_counts: dict[str, int] = {}
+    for v in record.verdicts:
+        verdict_counts[v.verdict] = verdict_counts.get(v.verdict, 0) + 1
+    judged = sum(n for k, n in verdict_counts.items() if k != "unverifiable")
+    supported = verdict_counts.get("supported", 0)
+
+    table = Table(title=f"run {record.run_id}", show_header=False, box=None)
+    table.add_column(style="bold")
+    table.add_column()
+    table.add_row("claims", str(len(record.claims)))
+    if record.verdicts:
+        pass_rate = f" ({supported / judged:.0%} of judged supported)" if judged else ""
+        table.add_row(
+            "verdicts",
+            " · ".join(f"{k}: {n}" for k, n in sorted(verdict_counts.items())) + pass_rate,
+        )
+    table.add_row("waves", f"{record.waves_run}" + (" (saturated)" if record.saturated else ""))
+    table.add_row("failed sub-questions", str(len(record.failed_sub_questions)))
+    table.add_row("searches", str(record.searches_used))
+    table.add_row("est. cost", f"${record.cost_estimate_usd:.2f}")
+    table.add_row("duration", f"{sum(record.timings.values()):.0f}s")
+    if report_path:
+        table.add_row("report", report_path)
     console.print(table)
-    console.print(
-        f"claims: {len(record.claims)} | failed sub-questions: {len(record.failed_sub_questions)} "
-        f"| searches: {record.searches_used} | est. cost: ${record.cost_estimate_usd:.2f}"
-    )
+    if record.limitations:
+        console.print("[dim]limitations:[/dim]")
+        for lim in record.limitations:
+            console.print(f"[dim]  - {lim}[/dim]")
 
 
 @app.command()
@@ -95,23 +121,49 @@ def research(
     routing: Annotated[str | None, typer.Option("--routing", help="gateway | direct | split.")] = None,
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip claim verification.")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Print run.json to stdout.")] = False,
+    plain: Annotated[bool, typer.Option("--plain", help="Line-based progress (no live UI).")] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="No progress output.")] = False,
 ) -> None:
     """Run deep research on QUESTION and write report.md + run.json."""
-    from .orchestrator import run_research  # deferred: keeps `--help` fast
+    from .orchestrator import BudgetFatalError, run_research  # deferred: keeps `--help` fast
 
     settings = _build_settings(depth, output, max_cost, routing, False if no_verify else None)
+
+    silent = quiet or json_output
+    use_live = not silent and not plain and err_console.is_terminal
+
+    async def _run():
+        if use_live:
+            with LiveProgress(err_console, question, settings.profile, settings.routing) as live:
+                return await run_research(question, settings, on_event=live.emit)
+        on_event = None if silent else _plain_printer()
+        return await run_research(question, settings, on_event=on_event)
+
     try:
-        result = asyncio.run(run_research(question, settings, on_event=_plain_printer(quiet or json_output)))
+        result = asyncio.run(_run())
     except KeyboardInterrupt:
         err_console.print("[red]interrupted[/red] — partial run.json flushed if a run started")
         raise typer.Exit(130) from None
+    except BudgetFatalError as e:
+        err_console.print(
+            f"[red]aborted: spend refusal from provider/gateway[/red] ({e})\n"
+            "Raise the spend cap in your Logfire gateway settings, lower --max-cost, or retry "
+            "with --routing direct. Partial artifacts were written."
+        )
+        raise typer.Exit(3) from None
+    except Exception as e:  # fatal: planning failed, credentials bad, etc.
+        err_console.print(f"[red]fatal:[/red] {type(e).__name__}: {e}")
+        raise typer.Exit(1) from None
 
+    record = result.record
     if json_output:
-        console.print_json(result.record.model_dump_json())
+        console.print_json(record.model_dump_json())
     elif not quiet:
-        _print_summary(result.record)
-        console.print(f"artifacts: {result.run_dir}")
+        _print_summary(record, record.report_path)
+
+    if not record.synthesis_ok:
+        err_console.print("[yellow]report synthesis fell back to a claims dump (exit 2)[/yellow]")
+        raise typer.Exit(2)
 
 
 if __name__ == "__main__":
