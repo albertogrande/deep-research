@@ -10,6 +10,35 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 4 — 2026-07-18 — Phase 3: the verifier — trust nothing, degrade everything
+
+**Built:** per-source verifier agent (WebFetchTool, `max_uses=2`), `group_claims_by_url`
+(canonical grouping, original URL preserved for fetchability), the verification stage with
+verdict merge, and 5 verifier tests.
+
+**Learnings & dev-ex notes:**
+
+- **The in-context-URL constraint shapes the design.** Anthropic's web fetch only fetches URLs
+  already present in context, so the verifier prompt *embeds* the source URL — that's not
+  cosmetic, it's what makes the fetch legal. Any redesign that moves URLs out of the prompt
+  silently breaks fetching.
+- **Three defensive layers on verdicts, each one catching a distinct model failure mode:**
+  (1) output validator: `fetch_ok=false ⇒ all unverifiable` (self-consistency, enforced with
+  ModelRetry); (2) merge filter: verdicts for hallucinated or cross-source claim ids are
+  dropped; (3) code backfill: any claim the model skipped becomes `unverifiable` — a skipped
+  claim must never pass as verified. Tests script each layer separately with FunctionModel.
+- The **`unverifiable ≠ unsupported` distinction** costs ~10 lines and buys honest reports:
+  contradicted claims will be excluded; merely-unfetchable ones survive with a marker. (Report
+  rendering lands in Phase 4.)
+- Budget-aware degradation reads nicely: verification silently skips itself when <25% of budget
+  remains, recording a limitation — the report (Phase 4's payoff stage) keeps its funding.
+
+**Watch-item for the first live run:** how often real-world sources 403 the fetcher. If the
+unverifiable rate is high (>40%), the verifier's value proposition weakens and that becomes a
+headline finding for the evals.
+
+---
+
 ## Entry 3 — 2026-07-18 — Phase 2: the wave loop — digests, dedup, budget, error policy
 
 **Built:** gap analyst agent, code-built gap digest (statements + counts + notes, never quotes),

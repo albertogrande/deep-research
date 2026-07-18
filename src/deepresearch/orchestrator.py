@@ -26,6 +26,7 @@ from pydantic_ai.exceptions import (
 from .agents.gap_analyst import MAX_FOLLOW_UPS, gap_analyst_agent
 from .agents.planner import planner_agent
 from .agents.researcher import researcher_agent
+from .agents.verifier import verifier_agent, verify_prompt
 from .artifacts import create_run_dir, new_run_id, write_run_record
 from .config import Role, Settings, resolve_model
 from .deps import Budget, BudgetExceeded, Deps, UsageLedger
@@ -34,8 +35,17 @@ from .digest import (
     dedup_questions,
     enrich_and_dedup_claims,
     gap_digest,
+    group_claims_by_url,
 )
-from .models import Claim, FailedSubQuestion, Findings, RunRecord, SubQuestion
+from .models import (
+    Claim,
+    FailedSubQuestion,
+    Findings,
+    RunRecord,
+    SourceVerification,
+    SubQuestion,
+    Verdict,
+)
 from .progress import (
     CostUpdate,
     GapResult,
@@ -44,6 +54,7 @@ from .progress import (
     ResearcherFailed,
     ResearcherFinished,
     ResearcherStarted,
+    VerificationProgress,
     WaveStarted,
 )
 from .telemetry import setup_telemetry
@@ -53,6 +64,12 @@ ROLES: tuple[Role, ...] = ("planner", "researcher", "gap_analyst", "verifier", "
 PLANNER_LIMITS = UsageLimits(request_limit=5)
 RESEARCHER_LIMITS = UsageLimits(request_limit=12, total_tokens_limit=120_000)
 GAP_LIMITS = UsageLimits(request_limit=5)
+VERIFIER_LIMITS = UsageLimits(request_limit=6, total_tokens_limit=60_000)
+
+VERIFY_CONCURRENCY = 4
+# Skip verification when less than this fraction of budget remains — synthesis is the payoff
+# and must always be affordable.
+VERIFY_MIN_BUDGET_FRACTION = 0.25
 
 TRANSIENT_RETRY_DELAY_S = 2.0  # module-level so tests can monkeypatch it away
 
@@ -155,6 +172,7 @@ async def run_research(
                 dedup_questions(plan.sub_questions, state.seen_questions), wave=1
             )
             await _wave_loop(query, plan.done_criteria, deps, record, state, timings, emit)
+            await _verification_stage(deps, record, state, timings, emit)
     finally:
         # Always flush the audit trail — including on errors and Ctrl-C.
         _reconcile_searches(ledger)
@@ -274,6 +292,95 @@ async def _gap_stage(query, done_criteria, deps: Deps, record, state: _RunState,
     record.final_coverage = gap.coverage
     emit(GapResult(gap.saturated, len(gap.follow_up_questions)))
     return gap
+
+
+async def _verification_stage(deps: Deps, record: RunRecord, state: _RunState, timings, emit) -> None:
+    """Per-source claim verification. Degradable per source; skippable by flag or budget."""
+    settings = deps.settings
+    if not state.claims:
+        return
+    if not settings.verify:
+        state.limitations.append("claim verification skipped (--no-verify)")
+        return
+    if deps.budget.remaining_fraction(deps.ledger) < VERIFY_MIN_BUDGET_FRACTION:
+        state.limitations.append("claim verification skipped: less than 25% of budget remaining")
+        return
+
+    by_source = group_claims_by_url(state.claims)
+    total = len(by_source)
+    t0 = time.perf_counter()
+    verdict_by_claim: dict[str, Verdict] = {}
+    counters = {"done": 0, "supported": 0, "judged": 0}
+    sem = asyncio.Semaphore(VERIFY_CONCURRENCY)
+
+    async def verify_source(url: str, claims: list[Claim]) -> SourceVerification:
+        async with sem:
+            try:
+                result = await verifier_agent.run(
+                    verify_prompt(url, claims),
+                    deps=deps,
+                    model=resolve_model("verifier", settings),
+                    usage=deps.ledger.usage_for("verifier"),
+                    usage_limits=VERIFIER_LIMITS,
+                )
+                sv = result.output
+            except Exception as e:
+                if classify_error(e) is ErrorClass.BUDGET_FATAL:
+                    raise BudgetFatalError(str(e)) from e
+                # Degrade: an unverifiable source, never a dead run.
+                sv = SourceVerification(
+                    source_url=url,
+                    fetch_ok=False,
+                    verdicts=[
+                        Verdict(
+                            claim_id=c.id,
+                            verdict="unverifiable",
+                            reasoning=f"verifier failed: {type(e).__name__}",
+                        )
+                        for c in claims
+                    ],
+                )
+            counters["done"] += 1
+            for v in sv.verdicts:
+                if v.verdict != "unverifiable":
+                    counters["judged"] += 1
+                    if v.verdict == "supported":
+                        counters["supported"] += 1
+            emit(
+                VerificationProgress(
+                    counters["done"], total, counters["supported"] / max(1, counters["judged"])
+                )
+            )
+            return sv
+
+    with logfire.span("verification", sources=total, claims=len(state.claims)):
+        results = await asyncio.gather(*[verify_source(url, claims) for url, claims in by_source.items()])
+
+    valid_ids = {c.id for c in state.claims}
+    cited_ids_by_source = {url: {c.id for c in claims} for url, claims in by_source.items()}
+    for sv, (url, _) in zip(results, by_source.items(), strict=True):
+        for v in sv.verdicts:
+            # Ignore hallucinated claim ids; first verdict per claim wins.
+            if v.claim_id in valid_ids and v.claim_id in cited_ids_by_source[url]:
+                verdict_by_claim.setdefault(v.claim_id, v)
+    # Backfill claims the verifier skipped — never silently treated as supported.
+    unverified_backlog = 0
+    for c in state.claims:
+        if c.id not in verdict_by_claim:
+            verdict_by_claim[c.id] = Verdict(
+                claim_id=c.id, verdict="unverifiable", reasoning="verifier returned no verdict"
+            )
+            unverified_backlog += 1
+
+    record.verdicts = [verdict_by_claim[c.id] for c in state.claims]
+    timings["verification"] = time.perf_counter() - t0
+
+    unverifiable = sum(1 for v in record.verdicts if v.verdict == "unverifiable")
+    if unverifiable:
+        state.limitations.append(
+            f"{unverifiable} of {len(record.verdicts)} claims could not be re-verified "
+            "(fetch failures, paywalls, or missing verdicts)"
+        )
 
 
 def _record_failure(record: RunRecord, state: _RunState, sq: SubQuestion, e: BaseException, emit) -> None:

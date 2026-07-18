@@ -62,6 +62,18 @@ def dedup_questions(planned: list[PlannedSubQuestion], seen_normalized: set[str]
     return fresh
 
 
+def group_claims_by_url(claims: list[Claim]) -> dict[str, list[Claim]]:
+    """Group claims by canonical URL for per-source verification. The dict key is the first
+    original URL seen for that canonical form (verifiers need a real fetchable URL)."""
+    canonical_to_original: dict[str, str] = {}
+    grouped: dict[str, list[Claim]] = {}
+    for c in claims:
+        canon = canonical_url(c.source_url)
+        original = canonical_to_original.setdefault(canon, c.source_url)
+        grouped.setdefault(original, []).append(c)
+    return grouped
+
+
 def gap_digest(
     query: str,
     done_criteria: list[str],

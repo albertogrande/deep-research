@@ -13,6 +13,7 @@ models.ALLOW_MODEL_REQUESTS = False  # belt & braces: no test may hit a real pro
 
 
 async def test_single_wave_run(settings, planner_model, researcher_model):
+    settings = settings.model_copy(update={"verify": False})  # wave plumbing only
     r_agent = researcher_agent(settings.prof.searches_per_researcher)
     with (
         planner_agent.override(model=planner_model),
