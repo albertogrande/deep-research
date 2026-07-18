@@ -10,6 +10,38 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 3 — 2026-07-18 — Phase 2: the wave loop — digests, dedup, budget, error policy
+
+**Built:** gap analyst agent, code-built gap digest (statements + counts + notes, never quotes),
+two-layer dedup (questions and claims), `classify_error` (transient / degradable / budget-fatal /
+fatal) with one-retry-on-transient, budget checkpoints at wave boundaries, and 5 scripted
+wave-loop policy tests (saturation stop, max-waves stop, dedup-empty stop, budget stop,
+transient retry).
+
+**Learnings & dev-ex notes:**
+
+- **`TestModel` generates real token usage numbers**, which means budget-enforcement tests work
+  without any mocking of the accounting: set `max_cost=0.000001`, run the pipeline, watch the
+  checkpoint trip. The deterministic-budget design paid off immediately in testability.
+- **`FunctionModel` + prompt-sniffing is the pattern for per-unit scripting** in fan-out tests:
+  the scripted function reads the sub-question id out of the prompt text and decides to crash,
+  stall, or answer. Slightly grubby, entirely effective.
+- **Policy-in-one-place worked.** Researcher failure, gap-analyst failure, and budget breach all
+  route through `classify_error` + limitations; agents stay policy-free. The
+  "one failed researcher never kills a run / a failed gap analyst just stops iteration" rules
+  are each one small `except` block in the orchestrator.
+- Structured-output validators doubled as **consistency enforcement across fields**
+  (`saturated=true` ⟹ no follow-ups) — something JSON schema alone can't express.
+
+**Design notes / limitations:**
+
+- In the `quick` profile (max_waves=1) the gap analyst never runs — the loop exits before the
+  gap stage. Intentional (quick = one cheap pass), but worth knowing when reading traces.
+- Sub-question dedup is exact-match after normalization; a semantically-duplicate rephrasing
+  will slip through and cost a researcher run. Accepted for v1.
+
+---
+
 ## Entry 2 — 2026-07-18 — Phase 1: plan → research pipeline, and testing agents without keys
 
 **Built:** the domain vocabulary (`models.py`), per-role usage ledger + budget (`deps.py`),

@@ -62,6 +62,39 @@ def dedup_questions(planned: list[PlannedSubQuestion], seen_normalized: set[str]
     return fresh
 
 
+def gap_digest(
+    query: str,
+    done_criteria: list[str],
+    sub_questions: list[SubQuestion],
+    claims: list[Claim],
+    notes_by_sq: dict[str, str],
+    failed_sq_ids: set[str],
+) -> str:
+    """Render what the gap analyst sees: statements, counts, domains, notes — never quotes,
+    never full URLs. Keeps a standard run's digest well under ~3k tokens."""
+    by_sq: dict[str, list[Claim]] = {}
+    for c in claims:
+        by_sq.setdefault(c.sub_question_id, []).append(c)
+
+    lines: list[str] = [f"MAIN QUESTION: {query}", "", "DONE CRITERIA:"]
+    lines += [f"- {d}" for d in done_criteria]
+    lines += ["", "SUB-QUESTIONS AND CLAIMS SO FAR:"]
+    for sq in sub_questions:
+        sq_claims = by_sq.get(sq.id, [])
+        domains = sorted({canonical_url(c.source_url).split("/")[0] for c in sq_claims})
+        status = " [RESEARCHER FAILED]" if sq.id in failed_sq_ids else ""
+        lines.append(f"\n{sq.id} (wave {sq.wave}){status}: {sq.question}")
+        lines.append(f"  claims: {len(sq_claims)} | distinct sources: {len(domains)}")
+        for c in sq_claims:
+            corroborated = f" (x{c.corroborations + 1})" if c.corroborations else ""
+            lines.append(f"  - [{c.confidence}] {c.statement}{corroborated}")
+        if notes := notes_by_sq.get(sq.id, "").strip():
+            lines.append(f"  researcher notes: {notes}")
+    lines += ["", "ALREADY-ASKED QUESTIONS (follow-ups must NOT restate these):"]
+    lines += [f"- {sq.question}" for sq in sub_questions]
+    return "\n".join(lines)
+
+
 def enrich_and_dedup_claims(
     raw: list[RawClaim],
     *,
