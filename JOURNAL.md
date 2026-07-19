@@ -10,6 +10,19 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 8 — 2026-07-19 — README polish
+
+Rewrote the README as the project's front door after researching current best practice
+(makeareadme.com, banesullivan/README, jehna/readme-best-practices). Applied the load-bearing
+principles: lead with one line of *what + why*; a **Highlights** list of selling points up top;
+show it *in action* (architecture diagram + real output shape); keep it scannable with headers;
+push long reference material (full flag table, limitations) into collapsible `<details>` so the
+main scroll stays crisp; state requirements and license plainly. Verified every asserted fact
+against the code first (47 offline tests, the exact flag set, exit codes, depth/cost table) so
+nothing in the README drifts from reality — the one exception is the sample summary block, whose
+numbers are illustrative of the *output format*, and the A/B results, which stay a placeholder
+until the first live run. No code changed.
+
 ## Entry 7 — 2026-07-18 — Phase 6: evals, and the v1 retrospective
 
 **Built:** the 8-case eval dataset (YAML, round-tripped through `Dataset.to_file`/`from_file`),

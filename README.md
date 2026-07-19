@@ -1,85 +1,138 @@
-# deepresearch
+<div align="center">
 
-A deep research agent system built end-to-end on the **Pydantic stack** — [Pydantic AI](https://pydantic.dev/docs/ai/) agents, [Logfire](https://pydantic.dev/docs/logfire/) observability, [Pydantic Evals](https://pydantic.dev/docs/ai/evals/), and the [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/) — using only Anthropic models and zero other services.
+# 🔍 deepresearch
+
+**A deep research agent that cites its sources — and checks them.**
+
+Ask a question; get back a cited Markdown report whose every claim has been re-fetched from its source and verified. Built end-to-end on the [Pydantic stack](https://pydantic.dev): [Pydantic AI](https://pydantic.dev/docs/ai/) · [Logfire](https://pydantic.dev/docs/logfire/) · [Pydantic Evals](https://pydantic.dev/docs/ai/evals/) · [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/). Anthropic models only, no other services.
+
+![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-47%20offline-brightgreen)
+
+</div>
+
+---
+
+Most open-source "deep research" tools stop at *retrieve and summarize*. **deepresearch adds the step they skip: adversarial verification** — it re-fetches every cited page and judges each claim against what the page actually says. Contradicted claims are dropped; unverifiable ones (paywalls, 403s) are kept but flagged. The [eval suite](#evals) exists to prove whether that step earns its cost.
 
 ```
-                 ┌────────────► Gap Analyst ──── follow-ups ────┐  (iterate until saturated)
-                 │                                              ▼
-Planner ──► wave 1: Researchers (parallel, server-side WebSearch + WebFetch) ──► wave 2 …
-                 │
-                 ▼
-        Verifier (re-fetches EVERY cited source, judges every claim against it)
-                 │
-                 ▼
-        Synthesizer (outline → sections, fixed [n] citations) ──► report.md + run.json
+                   ┌──────────► Gap Analyst ──── follow-ups ────┐   iterate until
+                   │                                            ▼   saturated / capped
+   Planner ──► Researchers (parallel, server-side web search + fetch) ──► next wave …
+                   │
+                   ▼
+           Verifier  ── re-fetches every cited source, judges every claim ──►
+                   │
+                   ▼
+           Synthesizer ── outline → sections, code-numbered [n] citations ──► report.md + run.json
 ```
 
-**The bet this project tests:** claim-level adversarial verification — re-fetching every cited source and checking each claim against what the page actually says — is the step most open-source deep-research clones skip. The eval suite exists to measure whether it earns its cost (`evals/experiments/verifier_ab.py`).
+## Highlights
 
-Built as a learning-in-public weekend project; the full build log — learnings, stack dev-ex notes, issues, limitations, and the project's origin story — lives in **[JOURNAL.md](JOURNAL.md)**.
+- **🔬 Claim-level verification** — the differentiator. Each claim is re-checked against its source; verdicts (`supported` / `partial` / `unsupported` / `unverifiable`) drive what reaches the report.
+- **🌊 Iterative, not one-shot** — a gap analyst reviews each wave and asks targeted follow-ups until the question is saturated (bounded by depth, budget, and dedup).
+- **🧾 Typed end to end** — every hop is a Pydantic model with validators; the model writes prose, **code owns the citation numbers** (they can't drift).
+- **💸 Deterministic cost control** — structural caps → per-call `UsageLimits` → a priced budget checkpointed between stages, with the Gateway spend cap as backstop. A failed run still writes its artifacts.
+- **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree: `plan → wave n → gap → verification → synthesis`.
+- **📊 Measured** — a Pydantic Evals suite with objective metrics + LLM judges, and a **verifier on/off A/B experiment**.
 
 ## Quickstart
 
 ```bash
 uv sync
-cp .env.example .env    # add your keys (see below)
+cp .env.example .env          # add your keys (see Requirements)
 uv run deepresearch "What are the main approaches to LLM hallucination detection?"
 ```
 
-You get a live progress UI (waves, researchers, verification pass rate, cost ticker), then `runs/<timestamp>-<slug>/report.md` (cited, with limitations and references) and `run.json` (the full typed audit trail: plan, claims, verdicts, usage, cost).
+You get a live progress view, then a run folder:
 
 ```
-Usage: deepresearch QUESTION [--depth quick|standard|deep] [--max-cost USD]
-                    [--routing gateway|direct|split] [--no-verify]
-                    [--json] [--plain] [--quiet] [-o DIR]
+runs/20260719-...-llm-hallucination-detection/
+├── report.md      # cited report: TL;DR, sections, limitations, references
+└── run.json       # full audit trail: plan, claims, verdicts, usage, cost, timings
 ```
 
-Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `3` provider/gateway spend refusal · `130` interrupted.
+…and a summary:
 
-## Keys and services
+```
+run 20260719-...-llm-hallucination-detection
+claims                34
+verdicts              supported: 22 · partial: 6 · unverifiable: 6  (79% of judged supported)
+waves                 2 (saturated)
+searches              18
+est. cost             $0.71
+duration              94s
+report                runs/…/report.md
+```
 
-| What | Why | Required? |
+## Requirements
+
+| Variable | Purpose | Needed? |
 |---|---|---|
-| `PYDANTIC_AI_GATEWAY_API_KEY` | All model calls via the [Gateway](https://pydantic.dev/docs/ai/gateway/) (BYOK = free), giving spend caps + per-model cost tracking | default routing |
-| `ANTHROPIC_API_KEY` | Direct Anthropic access (`--routing direct`, or `split`) | fallback |
-| `LOGFIRE_TOKEN` | Full tracing of every run in [Logfire](https://pydantic.dev/docs/logfire/) (free tier: 10M spans/mo) | optional, recommended |
+| `PYDANTIC_AI_GATEWAY_API_KEY` | Route all calls through the [Gateway](https://pydantic.dev/docs/ai/gateway/) (BYOK = free) for spend caps + cost tracking | default routing |
+| `ANTHROPIC_API_KEY` | Direct Anthropic access (`--routing direct` or `split`) | fallback |
+| `LOGFIRE_TOKEN` | Full tracing in [Logfire](https://pydantic.dev/docs/logfire/) (free tier: 10M spans/mo) | optional, recommended |
 
-**Costs real money:** web search is $10/1k searches; a `standard` run is roughly **$0.55–0.90** with the default $2 cap. Depth profiles: `quick` (1 wave, Haiku-heavy, cap $0.50) · `standard` (2 waves, Sonnet planning + synthesis, cap $2) · `deep` (up to 4 waves, Opus synthesis, cap $8).
+Python ≥ 3.11 · [uv](https://docs.astral.sh/uv/). **Costs real money:** web search is $10/1k searches; a `standard` run ≈ **$0.55–0.90**.
 
-## What makes it interesting
+## Usage
 
-- **Typed at every boundary.** `ResearchPlan → Findings → Claim → GapAnalysis → SourceVerification → Outline → RunRecord` are all Pydantic models; every agent has an `output_type` plus semantic output validators (`ModelRetry`) for rules schemas can't express ("`fetch_ok=false` ⇒ every verdict `unverifiable`", "an outline may not invent claim ids or drop >30% of supported ones").
-- **Wave-based iteration, not single-pass fan-out.** A gap analyst reviews a code-built digest after each wave and either declares saturation or emits targeted follow-ups — bounded by profile, budget, and question dedup.
-- **Verification with honest failure modes.** `unsupported` (source contradicts the claim) is excluded from the report; `unverifiable` (403/paywall) stays with a `†` marker and a limitations entry. Skipped verdicts are backfilled by code — nothing passes silently.
-- **Models write prose; code owns the numbers.** Citation `[n]` markers are precomputed, and the References/Limitations blocks are assembled deterministically — numbering cannot drift (locked by a golden-file test).
-- **Deterministic cost control, three layers.** Structural caps (waves, sub-questions, `max_uses`, semaphores) → per-run `UsageLimits` → a priced `Budget` checkpointed between stages, with the Gateway spend cap as the backstop. Failed runs still flush `run.json` and a claims-dump fallback report.
-- **Observability end to end.** One `logfire.instrument_pydantic_ai()` + orchestrator spans (`plan → wave n → gap analysis → verification → synthesis`) make a full research run one readable trace tree.
+```bash
+deepresearch "your question" [--depth quick|standard|deep] [--max-cost USD] [--no-verify]
+```
+
+| Depth | Waves | Synthesis model | Default cap |
+|---|---|---|---|
+| `quick` | 1 | Sonnet 4.6 | $0.50 |
+| `standard` | 2 | Sonnet 5 | $2.00 |
+| `deep` | up to 4 | Opus 4.8 | $8.00 |
+
+Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `3` spend refusal · `130` interrupted.
+
+<details>
+<summary>All flags</summary>
+
+| Flag | Effect |
+|---|---|
+| `-d, --depth` | `quick` · `standard` · `deep` (default `standard`) |
+| `-o, --output` | output directory (default `runs/`) |
+| `--max-cost` | USD cap for this run (overrides the profile default) |
+| `--routing` | `gateway` · `direct` · `split` (server-tool roles direct, rest via gateway) |
+| `--no-verify` | skip claim verification |
+| `--json` | print `run.json` to stdout (scriptable) |
+| `--plain` | line-based progress, no live UI |
+| `-q, --quiet` | no progress output |
+
+Per-role model overrides are env vars, e.g. `DEEPRESEARCH_MODELS__SYNTHESIZER=claude-opus-4-8`.
+
+</details>
 
 ## Evals
 
 ```bash
-uv run python -m evals.run_evals                    # 8-case suite (~$2.50, live web) + LLM judges
-uv run python -m evals.run_evals --no-judges        # objective metrics only
-uv run python -m evals.experiments.verifier_ab     # the flagship A/B: verifier on vs off
+uv run python -m evals.run_evals                  # 8-case suite (~$2.50) + LLM judges
+uv run python -m evals.experiments.verifier_ab    # the flagship: verifier on vs off
 ```
 
-8 question categories (factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, false-premise). Objective evaluators: citation coverage, URL resolution (plain httpx), verified-claim rate, unverifiable rate, unsupported-leakage assertion, duration. Judges (explicitly Anthropic — the library default judge is OpenAI): completeness, faithfulness, premise handling. With `LOGFIRE_TOKEN` set, every eval run lands as a named experiment in Logfire.
+Eight question categories (factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, false-premise). Objective evaluators — citation coverage, URL resolution, verified-claim rate, unverifiable rate, unsupported-leakage, duration — plus three LLM judges (completeness, faithfulness, premise-handling). With `LOGFIRE_TOKEN` set, every run lands as a named experiment in Logfire.
 
 <!-- A/B RESULTS: paste the verifier_ab table here after the first live run -->
 
 ## Development
 
 ```bash
-uv run pytest                      # 47 offline tests — TestModel/FunctionModel, no API calls
+uv run pytest                            # 47 offline tests — TestModel/FunctionModel, no API calls, no cost
 RUN_LIVE_TESTS=1 uv run pytest -m live   # ~$0.05 live smoke (also answers the gateway question)
-uv run python scripts/spike_gateway_server_tools.py  # gateway/server-tools spike, run once per env
+uv run python scripts/spike_gateway_server_tools.py   # run once per new environment
 ```
 
-Architecture rules live in [CLAUDE.md](CLAUDE.md); the honest history of what worked and what didn't is in [JOURNAL.md](JOURNAL.md).
+Architecture rules are in [CLAUDE.md](CLAUDE.md); the honest build log — every learning, dead end, and stack dev-ex note, from the project's origin story onward — is in **[JOURNAL.md](JOURNAL.md)**.
 
-### Known v1 limitations
+<details>
+<summary>Known v1 limitations</summary>
 
-No resume/checkpointing · exact-match question dedup only · sequential section writing · stage-level (not token-level) streaming UI · per-role model overrides are env-only · cost model ignores prompt-cache pricing · online evals not wired up. See journal entries for reasoning.
+No resume/checkpointing · exact-match question dedup only · sequential section writing · stage-level (not token-level) streaming · per-role model overrides are env-only · cost model ignores prompt-cache pricing · online evals not yet wired. See JOURNAL.md for the reasoning behind each.
+
+</details>
 
 ## License
 
