@@ -5,6 +5,7 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
+from deepresearch.agents.critic import critic_agent
 from deepresearch.agents.planner import planner_agent
 from deepresearch.agents.researcher import researcher_agent
 from deepresearch.agents.synthesizer import outline_agent, section_agent
@@ -67,6 +68,28 @@ def section_scripted():
     return fn
 
 
+def critic_ship() -> TestModel:
+    return TestModel(custom_output_args={"verdict": "ship", "issues": [], "guidance": ""})
+
+
+def critic_verdicts(sequence: list[str]):
+    """FunctionModel that returns verdicts in order across successive critic calls."""
+    calls = {"n": 0}
+
+    def fn(messages, info: AgentInfo) -> ModelResponse:
+        i = min(calls["n"], len(sequence) - 1)
+        verdict = sequence[i]
+        calls["n"] += 1
+        args = {
+            "verdict": verdict,
+            "issues": [] if verdict == "ship" else ["redundant paragraph under Section 1"],
+            "guidance": "" if verdict == "ship" else "delete the repeated sentence in Section 1",
+        }
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, args)])
+
+    return fn
+
+
 async def test_full_pipeline_produces_report(quick_settings, planner_model):
     r_agent = researcher_agent(quick_settings.prof.searches_per_researcher)
     with (
@@ -75,6 +98,7 @@ async def test_full_pipeline_produces_report(quick_settings, planner_model):
         verifier_agent.override(model=FunctionModel(verifier_scripted({})), native_tools=[]),
         outline_agent.override(model=FunctionModel(outline_scripted([["c-001"], ["c-002"]]))),
         section_agent.override(model=FunctionModel(section_scripted())),
+        critic_agent.override(model=critic_ship()),
     ):
         result = await run_research(QUERY, quick_settings)
 
@@ -105,6 +129,7 @@ async def test_outline_validator_rejects_unknown_claim_ids(quick_settings, plann
         verifier_agent.override(model=FunctionModel(verifier_scripted({})), native_tools=[]),
         outline_agent.override(model=FunctionModel(bad_then_good_outline)),
         section_agent.override(model=FunctionModel(section_scripted())),
+        critic_agent.override(model=critic_ship()),
     ):
         result = await run_research(QUERY, quick_settings)
 
@@ -122,6 +147,7 @@ async def test_unsupported_claims_excluded_from_report_but_kept_in_record(quick_
         ),
         outline_agent.override(model=FunctionModel(outline_scripted([["c-001"]]))),
         section_agent.override(model=FunctionModel(section_scripted())),
+        critic_agent.override(model=critic_ship()),
     ):
         result = await run_research(QUERY, quick_settings)
 
@@ -151,3 +177,50 @@ async def test_synthesis_failure_writes_claims_dump_fallback(quick_settings, pla
     assert report.startswith("# Research findings (unsynthesized)")
     assert "## References" in report  # sources still listed
     assert any("synthesis failed" in lim for lim in result.record.limitations)
+
+
+def _revise_loop_overrides(quick_settings, planner_model, critic_model):
+    """Common overrides for critic revise-loop tests; caller supplies the critic model."""
+    r_agent = researcher_agent(quick_settings.prof.searches_per_researcher)
+    return (
+        planner_agent.override(model=planner_model),
+        r_agent.override(model=TestModel(custom_output_args=FINDINGS_ARGS), native_tools=[]),
+        verifier_agent.override(model=FunctionModel(verifier_scripted({})), native_tools=[]),
+        outline_agent.override(model=FunctionModel(outline_scripted([["c-001"], ["c-002"]]))),
+        section_agent.override(model=FunctionModel(section_scripted())),
+        critic_agent.override(model=FunctionModel(critic_model)),
+    )
+
+
+async def test_critic_revise_once_then_ship(quick_settings, planner_model):
+    # First critique says revise, second says ship -> exactly one revise pass; two section rounds.
+    section_calls = {"n": 0}
+
+    def counting_section(messages, info: AgentInfo) -> ModelResponse:
+        section_calls["n"] += 1
+        return section_scripted()(messages, info)
+
+    o = _revise_loop_overrides(quick_settings, planner_model, critic_verdicts(["revise", "ship"]))
+    with o[0], o[1], o[2], o[3], section_agent.override(model=FunctionModel(counting_section)), o[5]:
+        result = await run_research(QUERY, quick_settings)
+
+    record = result.record
+    assert record.critique_verdict == "ship"
+    assert record.critique_iterations == 1  # one revise pass performed
+    assert section_calls["n"] == 4  # 2 sections × (initial draft + 1 revise)
+    assert result.report_path is not None
+
+
+async def test_critic_revise_capped_at_max_iters(quick_settings, planner_model):
+    # Critic never satisfied -> loop stops at MAX_REVISE_ITERS, ships last draft with verdict revise.
+    from deepresearch.orchestrator import MAX_REVISE_ITERS
+
+    o = _revise_loop_overrides(quick_settings, planner_model, critic_verdicts(["revise"]))
+    with o[0], o[1], o[2], o[3], o[4], o[5]:
+        result = await run_research(QUERY, quick_settings)
+
+    record = result.record
+    assert record.critique_verdict == "revise"  # never satisfied
+    assert record.critique_iterations == MAX_REVISE_ITERS
+    assert record.critique_issues  # last critique's issues recorded
+    assert result.record.synthesis_ok is True  # capped, not failed — still a real report

@@ -6,7 +6,7 @@
 
 Ask a question; get back a cited Markdown report whose every claim has been re-fetched from its source and verified. Built end-to-end on the [Pydantic stack](https://pydantic.dev): [Pydantic AI](https://pydantic.dev/docs/ai/) · [Logfire](https://pydantic.dev/docs/logfire/) · [Pydantic Evals](https://pydantic.dev/docs/ai/evals/) · [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/). Anthropic models only, no other services.
 
-![CI](https://github.com/albertogrande/pydantic/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-51%20offline-brightgreen)
+![CI](https://github.com/albertogrande/pydantic/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-53%20offline-brightgreen)
 
 </div>
 
@@ -18,21 +18,28 @@ Most open-source "deep research" tools stop at *retrieve and summarize*. **deepr
                    ┌──────────► Gap Analyst ──── follow-ups ────┐   iterate until
                    │                                            ▼   saturated / capped
    Planner ──► Researchers (parallel, server-side web search + fetch) ──► next wave …
-                   │
-                   ▼
+     (acceptance     │
+      criteria)      ▼
            Verifier  ── re-fetches every cited source, judges every claim ──►
                    │
                    ▼
-           Synthesizer ── outline → sections, code-numbered [n] citations ──► report.md + run.json
+           Synthesizer ── outline → sections, code-numbered [n] citations ──┐
+                   │                                                         │
+                   ▼                                                         │ revise (≤2×,
+           Critic ── grades vs the plan's acceptance criteria → ship | revise ┘  guidance-driven)
+                   │
+                   ▼  ship
+           report.md + run.json
 ```
 
 ## Highlights
 
 - **🔬 Claim-level verification** — the differentiator. Each claim is re-checked against its source; verdicts (`supported` / `partial` / `unsupported` / `unverifiable`) drive what reaches the report.
 - **🌊 Iterative, not one-shot** — a gap analyst reviews each wave and asks targeted follow-ups until the question is saturated (bounded by depth, budget, and dedup).
+- **⚖️ Critic gate** — the planner sets acceptance criteria; after synthesis a critic grades the draft against them (coverage, grounding, redundancy, date/tone discipline) and sends it back for up to 2 guidance-driven revise passes. The outline and citation numbering stay fixed across revisions.
 - **🧾 Typed end to end** — every hop is a Pydantic model with validators; the model writes prose, **code owns the citation numbers** (they can't drift).
 - **💸 Deterministic cost control** — structural caps → per-call `UsageLimits` → a priced budget checkpointed between stages, with the Gateway spend cap as backstop. A failed run still writes its artifacts.
-- **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree: `plan → wave n → gap → verification → synthesis`.
+- **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree (`plan → wave n → gap → verification → synthesis → critic`); each `run.json` carries its Logfire trace id.
 - **📊 Measured** — a Pydantic Evals suite with objective metrics + LLM judges, and a **verifier on/off A/B experiment**.
 
 ## Quickstart
@@ -120,7 +127,7 @@ Eight question categories (factual, multi-hop, time-sensitive, numeric, conteste
 ## Development
 
 ```bash
-uv run pytest                            # 51 offline tests — TestModel/FunctionModel, no API calls, no cost
+uv run pytest                            # 53 offline tests — TestModel/FunctionModel, no API calls, no cost
 RUN_LIVE_TESTS=1 uv run pytest -m live   # ~$0.05 live smoke (also answers the gateway question)
 uv run python scripts/spike_gateway_server_tools.py   # run once per new environment
 ```

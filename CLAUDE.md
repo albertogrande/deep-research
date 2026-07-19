@@ -21,7 +21,7 @@ history in old entries — corrections go in new entries.
   calls, golden-testable); the only side effects are the thin `write_*`/`create_run_dir`
   wrappers that form the file-I/O boundary.
 - `models.py` is the single shared vocabulary (Claim, Findings, GapAnalysis, Verdict,
-  RunRecord…) used by agents, orchestrator, artifacts, and evals alike.
+  Critique, RunRecord…) used by agents, orchestrator, artifacts, and evals alike.
 - Model strings are never spelled outside `config.resolve_model()` — routing
   (`gateway` / `direct` / `split`) and per-role model selection live there only.
 - The report's references/citation numbering is assembled by code, never written by a model.

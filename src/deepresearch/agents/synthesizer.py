@@ -78,4 +78,8 @@ Rules:
   "reportedly", "at least").
 - Write tight, information-dense prose in Markdown. No section heading (added by the
   assembler), no bullet-point dumps unless the content is genuinely enumerable, no filler.
-- 1-4 paragraphs. If claims contradict each other, present both sides with their citations."""
+- Repetition is the single biggest sin at this stage — never restate a point in different
+  words to look thorough. Length follows the material: say what the claims support, no more.
+- Absolute dates only ("in March 2026"), never relative ("recently", "last week").
+- No preamble, no sign-off, no meta-commentary about the research process or these instructions.
+- If claims contradict each other, surface the contradiction with both citations; don't smooth it."""

@@ -129,6 +129,14 @@ class SectionText(BaseModel):
     markdown: str = Field(description="Section body in Markdown, citing claims as [n].")
 
 
+class Critique(BaseModel):
+    """Critic verdict on a synthesized draft, graded against the plan's acceptance criteria."""
+
+    verdict: Literal["ship", "revise"]
+    issues: list[str] = Field(default_factory=list, description="Concrete problems, one per entry.")
+    guidance: str = Field(default="", description="Actionable instructions the reviser applies verbatim.")
+
+
 # --- run record (the audit trail evals consume) ------------------------------
 
 
@@ -166,6 +174,9 @@ class RunRecord(BaseModel):
     waves_run: int = 0
     saturated: bool = False
     synthesis_ok: bool = True
+    critique_verdict: str | None = None  # final ship|revise
+    critique_iterations: int = 0  # number of revise passes performed
+    critique_issues: list[str] = Field(default_factory=list)  # issues from the final critique
     final_coverage: list[SubQuestionCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     report_path: str | None = None

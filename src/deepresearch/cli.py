@@ -18,6 +18,7 @@ from .config import PROFILES, Settings
 from .models import RunRecord
 from .progress import (
     CostUpdate,
+    CritiqueResult,
     LiveProgress,
     PlanReady,
     ProgressEvent,
@@ -71,8 +72,10 @@ def _plain_printer() -> Callable[[ProgressEvent], None]:
             case VerificationProgress(done=d, total=t, pass_rate=p):
                 err_console.print(f"verification: {d}/{t} sources ({p:.0%} supported)")
             case SynthesisStage(stage=stage, index=i, total=t):
-                msg = "outline" if stage == "outline" else f"section {i}/{t}"
+                msg = stage if stage == "outline" else f"{stage} {i}/{t}"
                 err_console.print(f"synthesis: {msg}")
+            case CritiqueResult(verdict=v, iteration=it, n_issues=n):
+                err_console.print(f"critic (pass {it}): [bold]{v}[/bold]" + (f" — {n} issue(s)" if n else ""))
             case CostUpdate(estimate_usd=est, cap_usd=cap):
                 err_console.print(f"[dim]cost so far ≈ ${est:.2f} (cap ${cap:.2f})[/dim]")
 
@@ -97,6 +100,9 @@ def _print_summary(record: RunRecord, report_path: str | None) -> None:
             " · ".join(f"{k}: {n}" for k, n in sorted(verdict_counts.items())) + pass_rate,
         )
     table.add_row("waves", f"{record.waves_run}" + (" (saturated)" if record.saturated else ""))
+    if record.critique_verdict:
+        revised = f", {record.critique_iterations} revise pass(es)" if record.critique_iterations else ""
+        table.add_row("critic", f"{record.critique_verdict}{revised}")
     table.add_row("failed sub-questions", str(len(record.failed_sub_questions)))
     table.add_row("searches", str(record.searches_used))
     table.add_row("est. cost", f"${record.cost_estimate_usd:.2f}")

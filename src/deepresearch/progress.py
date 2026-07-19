@@ -59,9 +59,16 @@ class VerificationProgress(ProgressEvent):
 
 @dataclass(frozen=True)
 class SynthesisStage(ProgressEvent):
-    stage: str  # "outline" | "section"
+    stage: str  # "outline" | "section" | "revise"
     index: int = 0
     total: int = 0
+
+
+@dataclass(frozen=True)
+class CritiqueResult(ProgressEvent):
+    verdict: str  # "ship" | "revise"
+    iteration: int
+    n_issues: int
 
 
 @dataclass(frozen=True)
@@ -118,7 +125,14 @@ class LiveProgress:
             case VerificationProgress():
                 self._verification = event
             case SynthesisStage(stage=stage, index=i, total=t):
-                self._synthesis = "writing outline" if stage == "outline" else f"writing section {i}/{t}"
+                if stage == "outline":
+                    self._synthesis = "writing outline"
+                elif stage == "revise":
+                    self._synthesis = f"revising section {i}/{t}"
+                else:
+                    self._synthesis = f"writing section {i}/{t}"
+            case CritiqueResult(verdict=v, iteration=it, n_issues=n):
+                self._synthesis = f"critic pass {it}: {v}" + (f" ({n} issues)" if n else "")
             case CostUpdate():
                 self._cost = event
         self._refresh()

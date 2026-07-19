@@ -42,5 +42,7 @@ def test_per_role_env_override(monkeypatch):
     monkeypatch.setenv("DEEPRESEARCH_MODELS__GAP_ANALYST", "claude-sonnet-4-6")
     monkeypatch.setenv("DEEPRESEARCH_MODELS__VERIFIER", "claude-haiku-4-5")
     monkeypatch.setenv("DEEPRESEARCH_MODELS__SYNTHESIZER", "claude-sonnet-5")
+    monkeypatch.setenv("DEEPRESEARCH_MODELS__CRITIC", "claude-opus-4-8")
     s = Settings(_env_file=None)
     assert resolve_model("planner", s) == "gateway/anthropic:claude-opus-4-8"
+    assert resolve_model("critic", s) == "gateway/anthropic:claude-opus-4-8"

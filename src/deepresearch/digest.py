@@ -125,8 +125,10 @@ def section_prompt(
     claims: list[Claim],
     citations: CitationMap,
     verdict_by_claim: dict[str, Verdict],
+    revision_guidance: str = "",
 ) -> str:
-    """What a section-writer sees: this section's full claim records + fixed citation numbers."""
+    """What a section-writer sees: this section's full claim records + fixed citation numbers.
+    On a revise pass, the critic's guidance is appended for the writer to apply verbatim."""
     lines = [
         f"SECTION TITLE: {section.title}",
         f"SECTION GOAL: {section.goal}",
@@ -141,6 +143,37 @@ def section_prompt(
         lines.append(f"  statement: {c.statement}")
         lines.append(f'  quote: "{c.supporting_quote}"')
         lines.append(f"  source: {c.source_title}")
+    if revision_guidance.strip():
+        lines += [
+            "",
+            "--- CRITIC FEEDBACK ON THE PREVIOUS DRAFT (apply directly; do not argue) ---",
+            revision_guidance.strip(),
+        ]
+    return "\n".join(lines)
+
+
+def critic_prompt(
+    query: str,
+    done_criteria: list[str],
+    report_markdown: str,
+    claims: list[Claim],
+    verdict_by_claim: dict[str, Verdict],
+    iteration: int,
+) -> str:
+    """What the critic sees: the acceptance criteria, the claims (for grounding checks), and the
+    assembled draft. Claims are id + verdict + statement + source — no quotes (grounding is by id)."""
+    lines = [
+        f"MAIN QUESTION: {query}",
+        f"Iteration: {iteration} ({'first critique' if iteration == 0 else 'this draft was already revised'})",
+        "",
+        "ACCEPTANCE CRITERIA (from the plan):",
+    ]
+    lines += [f"{i + 1}. {c}" for i, c in enumerate(done_criteria)] or ["(none specified)"]
+    lines += ["", "CLAIMS THE WRITER WAS GIVEN (grounding reference):"]
+    for c in claims:
+        verdict = verdict_by_claim[c.id].verdict if c.id in verdict_by_claim else "unverified"
+        lines.append(f"- {c.id} [{verdict}] {c.statement} (source: {c.source_title})")
+    lines += ["", "DRAFT TO GRADE:", "```markdown", report_markdown, "```", "", "Return your verdict now."]
     return "\n".join(lines)
 
 

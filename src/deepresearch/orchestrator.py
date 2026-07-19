@@ -25,6 +25,7 @@ from pydantic_ai.exceptions import (
 )
 from pydantic_ai.usage import RunUsage
 
+from .agents.critic import critic_agent
 from .agents.gap_analyst import MAX_FOLLOW_UPS, gap_analyst_agent
 from .agents.planner import planner_agent
 from .agents.researcher import researcher_agent
@@ -43,6 +44,7 @@ from .deps import Budget, BudgetExceeded, Deps, UsageLedger
 from .digest import (
     assign_sub_question_ids,
     build_citation_map,
+    critic_prompt,
     dedup_questions,
     enrich_and_dedup_claims,
     gap_digest,
@@ -61,6 +63,7 @@ from .models import (
 )
 from .progress import (
     CostUpdate,
+    CritiqueResult,
     GapResult,
     PlanReady,
     ProgressEvent,
@@ -73,7 +76,14 @@ from .progress import (
 )
 from .telemetry import current_trace_id, setup_telemetry
 
-ROLES: tuple[Role, ...] = ("planner", "researcher", "gap_analyst", "verifier", "synthesizer")
+ROLES: tuple[Role, ...] = (
+    "planner",
+    "researcher",
+    "gap_analyst",
+    "verifier",
+    "synthesizer",
+    "critic",
+)
 
 PLANNER_LIMITS = UsageLimits(request_limit=5)
 RESEARCHER_LIMITS = UsageLimits(request_limit=12, total_tokens_limit=120_000)
@@ -81,7 +91,10 @@ GAP_LIMITS = UsageLimits(request_limit=5)
 VERIFIER_LIMITS = UsageLimits(request_limit=6, total_tokens_limit=60_000)
 OUTLINE_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=60_000)
 SECTION_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=40_000)
+CRITIC_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=60_000)
 
+# Max critic-driven revise passes after the first draft (0 disables the critic loop).
+MAX_REVISE_ITERS = 2
 VERIFY_CONCURRENCY = 4
 # Skip verification when less than this fraction of budget remains — synthesis is the payoff
 # and must always be affordable.
@@ -483,23 +496,64 @@ async def _synthesis_stage(
                 usage_limits=OUTLINE_LIMITS,
             )
             outline = outline_run.output
-
             claims_by_id = {c.id: c for c in usable}
-            bodies: list[str] = []
-            for i, section in enumerate(outline.sections, start=1):
-                emit(SynthesisStage("section", i, len(outline.sections)))
-                section_claims = [claims_by_id[cid] for cid in section.claim_ids if cid in claims_by_id]
-                section_run = await _run_agent(
-                    section_agent,
-                    section_prompt(section, section_claims, citations, verdict_by_claim),
-                    role="synthesizer",
-                    deps=deps,
-                    usage_limits=SECTION_LIMITS,
+
+            async def write_sections(guidance: str) -> str:
+                """Write every section (optionally applying critic guidance) and assemble.
+                The outline and citation map stay FIXED across revises, so citation numbering
+                never drifts — only the prose changes."""
+                stage = "revise" if guidance else "section"
+                bodies: list[str] = []
+                for i, section in enumerate(outline.sections, start=1):
+                    emit(SynthesisStage(stage, i, len(outline.sections)))
+                    section_claims = [claims_by_id[cid] for cid in section.claim_ids if cid in claims_by_id]
+                    section_run = await _run_agent(
+                        section_agent,
+                        section_prompt(section, section_claims, citations, verdict_by_claim, guidance),
+                        role="synthesizer",
+                        deps=deps,
+                        usage_limits=SECTION_LIMITS,
+                    )
+                    bodies.append(section_run.output.markdown)
+                return assemble_report(
+                    outline, bodies, citations, state.limitations, deps.today, unverifiable_count
                 )
-                bodies.append(section_run.output.markdown)
-        report = assemble_report(
-            outline, bodies, citations, state.limitations, deps.today, unverifiable_count
-        )
+
+            report = await write_sections("")
+
+            # Critic gate + bounded revise loop (borrowed from the deep-research TS pipeline):
+            # grade the draft against the plan's acceptance criteria; on "revise", rewrite the
+            # sections with the critic's guidance, up to MAX_REVISE_ITERS.
+            for iteration in range(MAX_REVISE_ITERS + 1):
+                try:
+                    critique = (
+                        await _run_agent(
+                            critic_agent,
+                            critic_prompt(query, done_criteria, report, usable, verdict_by_claim, iteration),
+                            role="critic",
+                            deps=deps,
+                            usage_limits=CRITIC_LIMITS,
+                        )
+                    ).output
+                except Exception as e:  # noqa: BLE001 — a flaky critic must not sink a good draft
+                    if classify_error(e) is ErrorClass.BUDGET_FATAL:
+                        raise BudgetFatalError(str(e)) from e
+                    state.limitations.append(
+                        f"critic failed ({type(e).__name__}); shipped un-critiqued draft"
+                    )
+                    break
+                record.critique_verdict = critique.verdict
+                record.critique_issues = list(critique.issues)
+                emit(CritiqueResult(critique.verdict, iteration, len(critique.issues)))
+                if critique.verdict == "ship" or iteration == MAX_REVISE_ITERS:
+                    break
+                try:
+                    deps.budget.checkpoint(deps.ledger, "before revise")
+                except BudgetExceeded:
+                    state.limitations.append("critic revisions skipped: budget cap reached")
+                    break
+                record.critique_iterations = iteration + 1
+                report = await write_sections(critique.guidance)
     except Exception as e:
         if classify_error(e) is ErrorClass.BUDGET_FATAL:
             record.synthesis_ok = False

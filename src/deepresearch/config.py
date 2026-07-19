@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Role = Literal["planner", "researcher", "gap_analyst", "verifier", "synthesizer"]
+Role = Literal["planner", "researcher", "gap_analyst", "verifier", "synthesizer", "critic"]
 Routing = Literal["gateway", "direct", "split"]
 
 # $/MTok (input, output). FALLBACK ONLY — primary pricing comes from the genai-prices bundled
@@ -41,6 +41,7 @@ class RoleModels(BaseModel):
     gap_analyst: str
     verifier: str
     synthesizer: str
+    critic: str
 
 
 class Profile(BaseModel):
@@ -66,6 +67,7 @@ PROFILES: dict[str, Profile] = {
             gap_analyst="claude-sonnet-4-6",
             verifier="claude-haiku-4-5",
             synthesizer="claude-sonnet-4-6",
+            critic="claude-sonnet-4-6",
         ),
         default_max_cost=0.50,
     ),
@@ -81,6 +83,7 @@ PROFILES: dict[str, Profile] = {
             gap_analyst="claude-sonnet-4-6",
             verifier="claude-haiku-4-5",
             synthesizer="claude-sonnet-5",
+            critic="claude-sonnet-5",
         ),
         default_max_cost=2.00,
     ),
@@ -96,6 +99,7 @@ PROFILES: dict[str, Profile] = {
             gap_analyst="claude-sonnet-5",
             verifier="claude-haiku-4-5",
             synthesizer="claude-opus-4-8",
+            critic="claude-opus-4-8",
         ),
         default_max_cost=8.00,
     ),

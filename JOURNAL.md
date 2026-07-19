@@ -10,6 +10,42 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 11 — 2026-07-19 — Borrowed a critic gate + revise loop from a sibling deep-research repo
+
+The user pointed me at their *other* deep-research project — `albertogrande/deep-research`, a
+TypeScript/Node full-stack system (Next.js reader + a worker that shells out to the `claude` CLI
+on a Max plan, five-phase pipeline, weekly cron, Kindle delivery). Added it to the session,
+shallow-cloned it, and mined it for what our Python system lacks. Nothing copies across languages;
+the value was in **design and prompts**.
+
+**The borrow that mattered: a Critic gate + bounded revise loop.** Their pipeline is
+Planner → Searchers → Synthesizer → **Critic → revise (≤2)**. The planner emits explicit
+*acceptance criteria*; after synthesis a critic grades the draft against them and returns
+ship|revise + guidance; the synthesizer re-runs with that guidance. We had the raw material
+already — `ResearchPlan.done_criteria` existed but was barely used — so this slotted in cleanly:
+
+- New `critic` agent (`agents/critic.py`) + `Critique` model. Prompt ported from their critic:
+  a six-point checklist (acceptance-criteria coverage, grounding, non-redundancy, structure fit,
+  date/tone discipline, contradiction handling) and — the part I most wanted — an explicit
+  "**never critique on length; if it's long because of repetition, the issue is repetition**".
+- Revise loop in `_synthesis_stage`: grade → on `revise`, rewrite the sections with the critic's
+  guidance appended, up to `MAX_REVISE_ITERS`. **Key adaptation to our architecture:** the
+  outline and citation map stay FIXED across revises — only section prose is regenerated — so our
+  "code owns citation numbers" invariant survives the loop (their system lets the model rewrite
+  the whole doc; we can't, or numbering would drift).
+- Hardened the section-writer prompt with the same discipline (absolute dates, no
+  meta-commentary/sign-off, repetition-is-the-worst-sin) so writer and critic agree on the rules.
+- Degradation preserved: a flaky critic ships the un-critiqued draft (never sinks a good report);
+  the revise loop is budget-checkpointed so it can't blow the cap; capping at max-iters ships the
+  last draft with verdict `revise` recorded. New `critic` role added across profiles (mirrors the
+  synthesizer tier). Recorded `critique_verdict`/`critique_iterations`/`critique_issues` in
+  run.json and the CLI summary.
+
+**Dev-ex note:** their prompts are unusually well-engineered — the "length is determined by the
+material, not policed" philosophy is a genuinely good idea I'd have under-weighted, and it's now
+in both our synthesizer and critic. Two new revise-loop tests (revise-once-then-ship;
+capped-at-max-iters); suite at 53 offline. Left their repo untouched.
+
 ## Entry 10 — 2026-07-19 — Borrowed from a sibling project (semantica-ai)
 
 A separate planning-only branch (`semantica-ai`: an n8n→Pydantic AI RAG migration plan) was
