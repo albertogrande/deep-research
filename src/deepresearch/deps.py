@@ -78,6 +78,8 @@ class UsageLedger:
                 requests=u.requests,
                 input_tokens=u.input_tokens or 0,
                 output_tokens=u.output_tokens or 0,
+                cache_read_tokens=u.cache_read_tokens or 0,
+                cache_write_tokens=u.cache_write_tokens or 0,
             )
             for role, u in self.by_role.items()
         }

@@ -10,6 +10,51 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 17 — 2026-07-19 — Model layer: prompt caching, adaptive thinking, transport retries
+
+Phase 3 — the "use Pydantic AI V2 properly" phase. Everything lives in `config.py` next to
+`resolve_model`, extending the repo rule: model *strings* were already config-only; now model
+*capability knowledge* (who thinks, what's cached, how transports retry) is too.
+
+**Prompt caching** (`role_model_settings`): `anthropic_cache_instructions` +
+`anthropic_cache_tool_definitions` for researcher/verifier — many calls per run share large
+stable instructions and server-tool defs. `anthropic_cache_messages` for the synthesizer —
+the outline digest recurs verbatim across section/revise calls, and message-level
+cache_control is the variant that survives gateways/proxies. Always on, no flag: a cache read
+is strictly cheaper than a fresh read. `RoleUsage` now records `cache_read/write_tokens`
+(genai-prices already priced them — the ledger just wasn't surfacing them) and the CLI summary
+shows a prompt-cache row when nonzero. Measured hit rates await the live-validation phase.
+
+**Thinking**: a capability table keyed on bare model name, beside `PRICING`. Sonnet 5 /
+Opus ≥4.7 get adaptive thinking (`{'type':'adaptive'}` + `anthropic_effort=high`); Sonnet 4.6
+gets a fixed 3072 budget; Haiku stays thinking-free (researcher/verifier cost floor). Roles:
+planner, gap analyst, critic — plus the synthesizer's *outline* call only, via a `reasoning=`
+override on `_run_agent` (outlining reasons; section calls just write). Gotcha caught in
+implementation: pydantic-ai's Anthropic default is `max_tokens=4096` and a budgeted thinking
+config must fit strictly under it — so thinking configs set `max_tokens=8192` explicitly.
+Skipped: the interleaved-thinking beta (`anthropic_betas` does expose it, but it only pays on
+thinking-enabled multi-turn tool use, and our tool-using researchers are deliberately
+thinking-free Haiku).
+
+**Transport retries** (`model_for_run`): one shared `httpx.AsyncClient` over
+`AsyncTenacityTransport` — retry 429/5xx/connection errors, `wait_retry_after` honouring
+Retry-After with exponential fallback, 4 attempts. The documented double-retry gotcha is
+handled both ways: direct path constructs `AsyncAnthropic(max_retries=0)`; the gateway path
+has no knob on `gateway_provider`, so we post-set `provider.client.max_retries = 0` (noted:
+mildly invasive, but the alternative was duplicating the gateway's URL-inference logic).
+`classify_error` stays the single run-level policy point above the transport.
+
+**The design find of the phase**: `model_for_run` returns a `Model` object when credentials
+exist and falls back to the `resolve_model` *string* when they don't. That one decision keeps
+offline tests key-free (`Agent.override` ignores `model=`), keeps CI green with zero env, and
+leaves live misconfiguration failing with pydantic-ai's own clear missing-key error. Also
+learned: a fake gateway key without an encoded region makes `gateway_provider` fail base-URL
+inference — tests set `PYDANTIC_AI_GATEWAY_BASE_URL` explicitly.
+
+Packaging fix folded in: `genai-prices` was imported by `deps.py` but only transitively
+present — now a declared dependency, plus the `retries` extra for tenacity. `RunRecord`
+labels unchanged (`models_used` still stores strings). 71 offline tests green. Cost: **$0**.
+
 ## Entry 16 — 2026-07-19 — Context hygiene: semantic dedup, claim ranking, per-domain caps
 
 Phase 2 of the SOTA effort — the Jina node-DeepResearch recipe (embedding dedup + URL ranking)

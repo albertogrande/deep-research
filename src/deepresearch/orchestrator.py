@@ -39,7 +39,7 @@ from .artifacts import (
     write_report,
     write_run_record,
 )
-from .config import Role, Settings, resolve_model
+from .config import Role, Settings, model_for_run, resolve_model, role_model_settings
 from .deps import Budget, BudgetExceeded, Deps, UsageLedger
 from .digest import (
     assign_sub_question_ids,
@@ -150,16 +150,25 @@ class _RunState:
 
 
 async def _run_agent(
-    agent: Agent, prompt: str, *, role: Role, deps: Deps, usage_limits: UsageLimits, **kwargs
+    agent: Agent,
+    prompt: str,
+    *,
+    role: Role,
+    deps: Deps,
+    usage_limits: UsageLimits,
+    reasoning: bool | None = None,
+    **kwargs,
 ):
     """Run an agent with a FRESH per-run RunUsage (so usage_limits apply to this run alone),
-    merging the result into the role's cumulative ledger afterwards — even on failure."""
+    merging the result into the role's cumulative ledger afterwards — even on failure.
+    Model choice, transport retries, caching, and thinking all come from config."""
     run_usage = RunUsage()
     try:
         return await agent.run(
             prompt,
             deps=deps,
-            model=resolve_model(role, deps.settings),
+            model=model_for_run(role, deps.settings),
+            model_settings=role_model_settings(role, deps.settings, reasoning=reasoning),
             usage=run_usage,
             usage_limits=usage_limits,
             **kwargs,
@@ -511,6 +520,7 @@ async def _synthesis_stage(
                 role="synthesizer",
                 deps=deps,
                 usage_limits=OUTLINE_LIMITS,
+                reasoning=True,  # outlining reasons; section calls just write
             )
             outline = outline_run.output
             claims_by_id = {c.id: c for c in usable}

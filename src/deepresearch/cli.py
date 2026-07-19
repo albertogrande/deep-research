@@ -107,6 +107,10 @@ def _print_summary(record: RunRecord, report_path: str | None) -> None:
         table.add_row("critic", f"{record.critique_verdict}{revised}")
     table.add_row("failed sub-questions", str(len(record.failed_sub_questions)))
     table.add_row("searches", str(record.searches_used))
+    cache_read = sum(u.cache_read_tokens for u in record.usage.values())
+    cache_write = sum(u.cache_write_tokens for u in record.usage.values())
+    if cache_read or cache_write:
+        table.add_row("prompt cache", f"read {cache_read:,} tok · write {cache_write:,} tok")
     table.add_row("est. cost", f"${record.cost_estimate_usd:.2f}")
     table.add_row("duration", f"{sum(record.timings.values()):.0f}s")
     if report_path:

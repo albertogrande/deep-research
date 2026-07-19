@@ -10,7 +10,8 @@ authors = [
 requires-python = ">=3.11"
 keywords = ["deep-research", "agents", "pydantic-ai", "logfire", "llm"]
 dependencies = [
-    "pydantic-ai-slim[anthropic,logfire]>=2.13.0",
+    "genai-prices>=0.0.35",
+    "pydantic-ai-slim[anthropic,logfire,retries]>=2.13.0",
     "pydantic-evals>=2.13.0",
     "pydantic-settings>=2.14.2",
     "rich>=15.0.0",

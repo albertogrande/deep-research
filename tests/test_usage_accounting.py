@@ -39,3 +39,16 @@ async def test_usage_limits_are_per_run_and_ledger_accumulates(tmp_path):
 
     # ...and the ledger still accumulates across runs for cost accounting.
     assert deps.ledger.by_role["planner"].requests == 3
+
+
+def test_snapshot_carries_cache_tokens(tmp_path):
+    from pydantic_ai.usage import RunUsage
+
+    deps = _deps(tmp_path)
+    deps.ledger.record(
+        "researcher",
+        RunUsage(input_tokens=1000, output_tokens=200, cache_read_tokens=800, cache_write_tokens=150),
+    )
+    snap = deps.ledger.snapshot(deps.settings)
+    assert snap["researcher"].cache_read_tokens == 800
+    assert snap["researcher"].cache_write_tokens == 150

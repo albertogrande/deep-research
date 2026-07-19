@@ -1,15 +1,22 @@
 """Settings, depth profiles, model pricing, and model-string resolution.
 
 Model strings (including the ``gateway/`` vs ``anthropic:`` prefix) are spelled in
-:func:`resolve_model` and nowhere else in the codebase.
+:func:`resolve_model` and nowhere else in the codebase. The same rule extends to model
+*capability* knowledge: which models think adaptively, what gets prompt-cached per role,
+and how transports retry all live HERE (:func:`role_model_settings` / :func:`model_for_run`).
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from functools import lru_cache
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    import httpx
+    from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 
 Role = Literal["planner", "researcher", "gap_analyst", "verifier", "synthesizer", "critic"]
 Routing = Literal["gateway", "direct", "split"]
@@ -123,6 +130,7 @@ class Settings(BaseSettings):
     max_revise_iters: int = 2  # critic-driven revise passes after the first draft (0 disables the loop)
     concurrency: int | None = None  # None -> profile default
     output_dir: str = "runs"
+    transport_retries: bool = True  # tenacity transport with Retry-After handling under every model
 
     @property
     def prof(self) -> Profile:
@@ -154,5 +162,132 @@ def provider_prefix(settings: Settings, *, server_tool: bool) -> str:
 
 
 def resolve_model(role: Role, settings: Settings) -> str:
-    """Return the full pydantic-ai model string for a role, including routing prefix."""
+    """Return the full pydantic-ai model string for a role, including routing prefix.
+
+    This is the LABEL — it is what lands in ``RunRecord.models_used`` and what pricing keys
+    off. :func:`model_for_run` may upgrade it to a ``Model`` object with a retrying transport,
+    but the string identity of a run never changes."""
     return provider_prefix(settings, server_tool=role in SERVER_TOOL_ROLES) + settings.bare_model(role)
+
+
+# --- per-role model settings: prompt caching + thinking --------------------------------------
+
+# Roles whose calls are preceded by deliberate reasoning. They get thinking when their model
+# supports it; researchers/verifiers/section-writers don't (cost floor matters more there).
+REASONING_ROLES: frozenset[str] = frozenset({"planner", "gap_analyst", "critic"})
+
+# Thinking needs output headroom: the pydantic-ai Anthropic default is max_tokens=4096, and a
+# budgeted thinking config must fit strictly under max_tokens.
+THINKING_MAX_TOKENS = 8192
+THINKING_BUDGET_TOKENS = 3072
+
+# Adaptive thinking (model decides when/how much, steered by `anthropic_effort`) exists on
+# Sonnet 5 / Opus >= 4.7; older Sonnets use a fixed budget; Haiku runs without thinking.
+_ADAPTIVE_THINKING_MODELS = ("claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5")
+_BUDGETED_THINKING_MODELS = ("claude-sonnet-4-6",)
+
+
+def _thinking_settings(bare_model: str) -> dict:
+    if bare_model.startswith(_ADAPTIVE_THINKING_MODELS):
+        return {
+            "anthropic_thinking": {"type": "adaptive"},
+            "anthropic_effort": "high",
+            "max_tokens": THINKING_MAX_TOKENS,
+        }
+    if bare_model.startswith(_BUDGETED_THINKING_MODELS):
+        return {
+            "anthropic_thinking": {"type": "enabled", "budget_tokens": THINKING_BUDGET_TOKENS},
+            "max_tokens": THINKING_MAX_TOKENS,
+        }
+    return {}
+
+
+def role_model_settings(
+    role: Role, settings: Settings, *, reasoning: bool | None = None
+) -> AnthropicModelSettings | None:
+    """Model settings for one role: prompt-cache placement and thinking config.
+
+    ``reasoning`` overrides the role default for calls where the orchestrator knows better
+    (the synthesizer's outline call reasons; its section calls just write).
+    Caching is always on — a cache read is strictly cheaper than a fresh read.
+    """
+    from pydantic_ai.models.anthropic import AnthropicModelSettings
+
+    out: dict = {}
+    if role in ("researcher", "verifier"):
+        # Many calls per run share the same large instructions + server-tool definitions.
+        out["anthropic_cache_instructions"] = True
+        out["anthropic_cache_tool_definitions"] = True
+    elif role == "synthesizer":
+        # The outline digest recurs verbatim across section/revise calls; message-level
+        # cache_control is the variant that survives gateways/proxies.
+        out["anthropic_cache_messages"] = True
+    if reasoning is None:
+        reasoning = role in REASONING_ROLES
+    if reasoning:
+        out.update(_thinking_settings(settings.bare_model(role)))
+    return AnthropicModelSettings(**out) if out else None
+
+
+# --- transport-level retries -----------------------------------------------------------------
+
+
+def _validate_response(response: httpx.Response) -> None:
+    """Only convert retry-worthy statuses into exceptions; 4xx client errors flow through to
+    the SDK untouched (retrying a 400 is pointless, and `classify_error` handles the rest)."""
+    if response.status_code == 429 or response.status_code >= 500:
+        response.raise_for_status()
+
+
+@lru_cache(maxsize=1)
+def _retrying_http_client() -> httpx.AsyncClient:
+    """One shared httpx client whose transport retries 429/5xx/connection trouble with
+    exponential backoff, honouring Retry-After (`wait_retry_after`)."""
+    import httpx
+    from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
+    from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
+
+    transport = AsyncTenacityTransport(
+        RetryConfig(
+            retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
+            wait=wait_retry_after(fallback_strategy=wait_exponential(multiplier=1, max=30), max_wait=60),
+            stop=stop_after_attempt(4),
+            reraise=True,
+        ),
+        validate_response=_validate_response,
+    )
+    return httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(600.0, connect=10.0))
+
+
+@lru_cache(maxsize=32)
+def _retrying_model(bare_model: str, *, direct: bool) -> AnthropicModel:
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from pydantic_ai.providers.gateway import gateway_provider
+
+    client = _retrying_http_client()
+    if direct:
+        from anthropic import AsyncAnthropic
+
+        # max_retries=0: the tenacity transport owns retrying; the SDK's own retry loop on
+        # top of it would multiply attempts (documented pydantic-ai gotcha).
+        provider = AnthropicProvider(anthropic_client=AsyncAnthropic(http_client=client, max_retries=0))
+    else:
+        provider = gateway_provider("anthropic", http_client=client)
+        provider.client.max_retries = 0  # same gotcha; gateway_provider has no direct knob
+    return AnthropicModel(bare_model, provider=provider)
+
+
+def model_for_run(role: Role, settings: Settings) -> str | AnthropicModel:
+    """What the orchestrator passes as ``model=``: a Model object carrying the retrying
+    transport when credentials exist, else the plain :func:`resolve_model` string.
+
+    The string fallback keeps offline tests key-free (``Agent.override`` ignores ``model=``)
+    and leaves live misconfiguration to fail with pydantic-ai's own clear missing-key error."""
+    if not settings.transport_retries:
+        return resolve_model(role, settings)
+    direct = settings.routing == "direct" or (settings.routing == "split" and role in SERVER_TOOL_ROLES)
+    try:
+        return _retrying_model(settings.bare_model(role), direct=direct)
+    except Exception:
+        return resolve_model(role, settings)

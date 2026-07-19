@@ -155,6 +155,8 @@ class RoleUsage(BaseModel):
     requests: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class RunRecord(BaseModel):
