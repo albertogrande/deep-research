@@ -14,7 +14,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 Role = Literal["planner", "researcher", "gap_analyst", "verifier", "synthesizer"]
 Routing = Literal["gateway", "direct", "split"]
 
-# $/MTok (input, output). Sonnet 5 is intro pricing through 2026-08-31; $3/$15 after.
+# $/MTok (input, output). FALLBACK ONLY — primary pricing comes from the genai-prices bundled
+# snapshot (see deps.price_role_usage), which also handles cache tokens and the Sonnet 5
+# intro→standard date transition. This table is used only for models genai-prices doesn't know.
 PRICING: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.00, 5.00),
     "claude-sonnet-4-6": (3.00, 15.00),

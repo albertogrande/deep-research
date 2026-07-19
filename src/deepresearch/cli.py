@@ -103,6 +103,8 @@ def _print_summary(record: RunRecord, report_path: str | None) -> None:
     table.add_row("duration", f"{sum(record.timings.values()):.0f}s")
     if report_path:
         table.add_row("report", report_path)
+    if record.logfire_trace_id:
+        table.add_row("logfire trace", record.logfire_trace_id)
     console.print(table)
     if record.limitations:
         console.print("[dim]limitations:[/dim]")

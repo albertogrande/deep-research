@@ -6,7 +6,7 @@
 
 Ask a question; get back a cited Markdown report whose every claim has been re-fetched from its source and verified. Built end-to-end on the [Pydantic stack](https://pydantic.dev): [Pydantic AI](https://pydantic.dev/docs/ai/) · [Logfire](https://pydantic.dev/docs/logfire/) · [Pydantic Evals](https://pydantic.dev/docs/ai/evals/) · [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/). Anthropic models only, no other services.
 
-![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-47%20offline-brightgreen)
+![CI](https://github.com/albertogrande/pydantic/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-51%20offline-brightgreen)
 
 </div>
 
@@ -113,14 +113,14 @@ uv run python -m evals.run_evals                  # 8-case suite (~$2.50) + LLM 
 uv run python -m evals.experiments.verifier_ab    # the flagship: verifier on vs off
 ```
 
-Eight question categories (factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, false-premise). Objective evaluators — citation coverage, URL resolution, verified-claim rate, unverifiable rate, unsupported-leakage, duration — plus three LLM judges (completeness, faithfulness, premise-handling). With `LOGFIRE_TOKEN` set, every run lands as a named experiment in Logfire.
+Eight question categories (factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, false-premise). Objective evaluators — citation coverage, citation integrity, URL resolution, verified-claim rate, unverifiable rate, unsupported-leakage, duration — plus three LLM judges (completeness, faithfulness, premise-handling). With `LOGFIRE_TOKEN` set, every run lands as a named experiment in Logfire.
 
 <!-- A/B RESULTS: paste the verifier_ab table here after the first live run -->
 
 ## Development
 
 ```bash
-uv run pytest                            # 47 offline tests — TestModel/FunctionModel, no API calls, no cost
+uv run pytest                            # 51 offline tests — TestModel/FunctionModel, no API calls, no cost
 RUN_LIVE_TESTS=1 uv run pytest -m live   # ~$0.05 live smoke (also answers the gateway question)
 uv run python scripts/spike_gateway_server_tools.py   # run once per new environment
 ```
@@ -130,7 +130,7 @@ Architecture rules are in [CLAUDE.md](CLAUDE.md); the honest build log — every
 <details>
 <summary>Known v1 limitations</summary>
 
-No resume/checkpointing · exact-match question dedup only · sequential section writing · stage-level (not token-level) streaming · per-role model overrides are env-only · cost model ignores prompt-cache pricing · online evals not yet wired. See JOURNAL.md for the reasoning behind each.
+No resume/checkpointing · exact-match question dedup only · sequential section writing · stage-level (not token-level) streaming · per-role model overrides are env-only · online evals not yet wired. See JOURNAL.md for the reasoning behind each.
 
 </details>
 

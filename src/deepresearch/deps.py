@@ -8,10 +8,38 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from genai_prices import Usage as PriceUsage
+from genai_prices import calc_price
 from pydantic_ai.usage import RunUsage
 
 from .config import PRICING, SEARCH_COST_USD, Role, Settings
 from .models import RoleUsage
+
+
+def price_role_usage(bare_model: str, usage: RunUsage) -> float:
+    """USD token cost for one role's accumulated usage.
+
+    Uses ``genai-prices`` (bundled offline snapshot; knows Anthropic model ids, the Sonnet 5
+    intro→standard date transition, and cache-token rates). Falls back to the static PRICING
+    table if a model is unknown to the snapshot.
+    """
+    try:
+        calc = calc_price(
+            PriceUsage(
+                input_tokens=usage.input_tokens or 0,
+                output_tokens=usage.output_tokens or 0,
+                cache_read_tokens=usage.cache_read_tokens or 0,
+                cache_write_tokens=usage.cache_write_tokens or 0,
+            ),
+            model_ref=bare_model,
+            provider_id="anthropic",
+        )
+        return float(calc.total_price)
+    except Exception:
+        in_rate, out_rate = PRICING.get(bare_model, (0.0, 0.0))
+        return (usage.input_tokens or 0) / 1_000_000 * in_rate + (
+            usage.output_tokens or 0
+        ) / 1_000_000 * out_rate
 
 
 class BudgetExceeded(Exception):
@@ -65,10 +93,7 @@ class Budget:
     def estimate(self, ledger: UsageLedger) -> float:
         total = ledger.searches * SEARCH_COST_USD
         for role, usage in ledger.by_role.items():
-            bare = self.settings.bare_model(role)  # type: ignore[arg-type]
-            in_rate, out_rate = PRICING.get(bare, (0.0, 0.0))
-            total += (usage.input_tokens or 0) / 1_000_000 * in_rate
-            total += (usage.output_tokens or 0) / 1_000_000 * out_rate
+            total += price_role_usage(self.settings.bare_model(role), usage)  # type: ignore[arg-type]
         return total
 
     def remaining_fraction(self, ledger: UsageLedger) -> float:

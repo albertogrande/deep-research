@@ -24,3 +24,13 @@ def setup_telemetry(*, console: bool = False) -> None:
     )
     logfire.instrument_pydantic_ai()
     _configured = True
+
+
+def current_trace_id() -> str | None:
+    """Hex trace id of the active span, or None when no real trace is active (e.g. no
+    LOGFIRE_TOKEN). Lets a run.json link back to its Logfire trace — borrowed from the
+    semantica-ai plan's ``execution_id = root span trace id`` pattern."""
+    from opentelemetry import trace
+
+    ctx = trace.get_current_span().get_span_context()
+    return f"{ctx.trace_id:032x}" if ctx.trace_id else None

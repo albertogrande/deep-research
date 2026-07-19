@@ -71,7 +71,7 @@ from .progress import (
     VerificationProgress,
     WaveStarted,
 )
-from .telemetry import setup_telemetry
+from .telemetry import current_trace_id, setup_telemetry
 
 ROLES: tuple[Role, ...] = ("planner", "researcher", "gap_analyst", "verifier", "synthesizer")
 
@@ -203,6 +203,7 @@ async def run_research(
     report_path: Path | None = None
     try:
         with logfire.span("research run", query=query, profile=settings.profile, run_id=run_id):
+            record.logfire_trace_id = current_trace_id()
             try:
                 plan = await _plan_stage(query, deps, record, timings, emit)
                 state.sub_questions = assign_sub_question_ids(

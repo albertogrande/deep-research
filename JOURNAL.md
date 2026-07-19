@@ -10,6 +10,34 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 10 — 2026-07-19 — Borrowed from a sibling project (semantica-ai)
+
+A separate planning-only branch (`semantica-ai`: an n8n→Pydantic AI RAG migration plan) was
+about to be deleted. Different domain, same stack — so I mined it for cross-cutting patterns
+worth keeping, and applied four:
+
+1. **`genai-prices` for cost estimation** (their plan used it for pricing). It turns out to be a
+   *transitive dependency of pydantic-ai-slim already*, ships a bundled offline snapshot, and
+   knows every model we use — including the Sonnet 5 intro→standard **date transition** and
+   **cache-token** rates. This retires two limitations I'd journaled (stale hand-maintained
+   pricing; cache-blind cost) in one move. `deps.price_role_usage` calls it and falls back to
+   the static `PRICING` table only for unknown models. Dev-ex: nice to discover a first-party
+   Pydantic-ecosystem lib solving exactly the thing I'd hand-rolled.
+2. **CI** (`.github/workflows/ci.yml`): uv sync + ruff + format check + offline pytest on push
+   and PRs. We had 48 tests and no gate running them; CLAUDE.md already assumed CI existed.
+3. **`execution_id = trace id` pattern** → `RunRecord.logfire_trace_id`. Each run.json (and the
+   CLI summary) now carries the hex trace id, so you can jump straight from an artifact to its
+   Logfire trace. `telemetry.current_trace_id()` reads it from the active OTel span (None when
+   keyless).
+4. **`CitationIntegrity`** evaluator (their deterministic citation check): every `[n]` in the
+   body resolves to a listed, contiguously-numbered reference — a strong non-flaky complement to
+   the existing coverage/faithfulness evaluators.
+
+Skipped their broader `instrument_httpx/asyncpg/openai` (we have no DB, and Anthropic calls are
+already traced by `instrument_pydantic_ai` — HTTP-level spans would just double the noise).
+Suite: 51 offline tests green. The migration docs themselves are domain-specific to their RAG
+app and weren't copied; only the stack-level techniques were.
+
 ## Entry 9 — 2026-07-19 — Code review: a real UsageLimits bug, and the fix
 
 Ran an xhigh code review over the whole codebase. It surfaced a genuine correctness bug worth

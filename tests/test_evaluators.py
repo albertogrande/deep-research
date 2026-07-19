@@ -8,6 +8,7 @@ from deepresearch.models import Claim, RunRecord, Verdict
 from evals.common import EvalOutput
 from evals.evaluators import (
     CitationCoverage,
+    CitationIntegrity,
     UnsupportedLeakage,
     URLResolution,
     VerifiedClaimRate,
@@ -82,6 +83,22 @@ def test_report_body_paragraphs_excludes_tail_headings_and_tldr():
 def test_citation_coverage_half():
     out = EvalOutput(report_markdown=REPORT, record=_record([]))
     assert CitationCoverage().evaluate(_ctx(out)) == {"citation_coverage": 0.5}
+
+
+def test_citation_integrity_passes_on_sound_report():
+    out = EvalOutput(report_markdown=REPORT, record=_record([]))  # body cites [1]; one reference
+    assert CitationIntegrity().evaluate(_ctx(out)) == {"citation_integrity": True}
+
+
+def test_citation_integrity_flags_dangling_citation():
+    broken = REPORT.replace("a fact [1]", "a fact [2]")  # [2] with only one reference -> dangling
+    out = EvalOutput(report_markdown=broken, record=_record([]))
+    assert CitationIntegrity().evaluate(_ctx(out)) == {"citation_integrity": False}
+
+
+def test_citation_integrity_not_applicable_without_references():
+    out = EvalOutput(report_markdown="# Title\n\nNo references here.", record=_record([]))
+    assert CitationIntegrity().evaluate(_ctx(out)) == {}
 
 
 def test_verified_claim_rate_ignores_unverifiable():

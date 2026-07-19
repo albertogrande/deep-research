@@ -52,6 +52,31 @@ class CitationCoverage(Evaluator[str, EvalOutput, Any]):
         return {"citation_coverage": covered / len(paragraphs)}
 
 
+_REF_LINE = re.compile(r"^(\d+)\.\s", re.MULTILINE)
+_CITE_NUM = re.compile(r"\[(\d+)\]")
+
+
+@dataclass
+class CitationIntegrity(Evaluator[str, EvalOutput, Any]):
+    """Deterministic citation soundness (borrowed from the semantica-ai evals plan): every
+    ``[n]`` in the body resolves to a listed reference, and references are numbered
+    contiguously from 1. Passing = True. Not applicable to reference-less fallback reports."""
+
+    def evaluate(self, ctx: EvaluatorContext[str, EvalOutput, Any]) -> dict[str, bool]:
+        report = ctx.output.report_markdown
+        idx = report.find("## References")
+        if idx == -1:
+            return {}
+        ref_nums = [int(m.group(1)) for m in _REF_LINE.finditer(report[idx:])]
+        if not ref_nums:
+            return {}
+        body = "\n".join(report_body_paragraphs(report))
+        body_nums = {int(n) for n in _CITE_NUM.findall(body)}
+        contiguous = ref_nums == list(range(1, len(ref_nums) + 1))
+        no_dangling = body_nums <= set(ref_nums)
+        return {"citation_integrity": contiguous and no_dangling}
+
+
 @dataclass
 class VerifiedClaimRate(Evaluator[str, EvalOutput, Any]):
     """supported / (total - unverifiable). Not applicable when verification didn't run."""

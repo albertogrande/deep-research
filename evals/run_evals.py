@@ -19,6 +19,7 @@ from deepresearch.telemetry import setup_telemetry
 from .common import EvalMeta, EvalOutput, eval_settings, judge_model, make_task
 from .evaluators import (
     CitationCoverage,
+    CitationIntegrity,
     UnsupportedLeakage,
     UnverifiableRate,
     URLResolution,
@@ -35,6 +36,7 @@ def load_dataset() -> Dataset[str, EvalOutput, EvalMeta]:
 def objective_evaluators() -> list:
     return [
         CitationCoverage(),
+        CitationIntegrity(),
         VerifiedClaimRate(),
         UnverifiableRate(),
         UnsupportedLeakage(),

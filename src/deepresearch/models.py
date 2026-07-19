@@ -152,6 +152,7 @@ class RunRecord(BaseModel):
     query: str
     profile: str
     routing: str
+    logfire_trace_id: str | None = None  # hex trace id → jump to this run's trace in Logfire
     models_used: dict[str, str] = Field(default_factory=dict)  # role -> resolved model string
     plan: ResearchPlan | None = None
     sub_questions: list[SubQuestion] = Field(default_factory=list)
