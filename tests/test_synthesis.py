@@ -211,16 +211,34 @@ async def test_critic_revise_once_then_ship(quick_settings, planner_model):
     assert result.report_path is not None
 
 
-async def test_critic_revise_capped_at_max_iters(quick_settings, planner_model):
-    # Critic never satisfied -> loop stops at MAX_REVISE_ITERS, ships last draft with verdict revise.
-    from deepresearch.orchestrator import MAX_REVISE_ITERS
+async def test_max_revise_iters_zero_grades_once_never_revises(quick_settings, planner_model):
+    # max_revise_iters=0 (cheapest): critic still grades the draft once, but no revise pass runs.
+    quick_settings.max_revise_iters = 0
+    section_calls = {"n": 0}
 
+    def counting_section(messages, info: AgentInfo) -> ModelResponse:
+        section_calls["n"] += 1
+        return section_scripted()(messages, info)
+
+    o = _revise_loop_overrides(quick_settings, planner_model, critic_verdicts(["revise"]))
+    with o[0], o[1], o[2], o[3], section_agent.override(model=FunctionModel(counting_section)), o[5]:
+        result = await run_research(QUERY, quick_settings)
+
+    record = result.record
+    assert record.critique_verdict == "revise"  # graded once
+    assert record.critique_iterations == 0  # but no revise pass performed
+    assert section_calls["n"] == 2  # 2 sections × initial draft only (no rewrite)
+    assert result.record.synthesis_ok is True
+
+
+async def test_critic_revise_capped_at_max_iters(quick_settings, planner_model):
+    # Critic never satisfied -> loop stops at max_revise_iters, ships last draft with verdict revise.
     o = _revise_loop_overrides(quick_settings, planner_model, critic_verdicts(["revise"]))
     with o[0], o[1], o[2], o[3], o[4], o[5]:
         result = await run_research(QUERY, quick_settings)
 
     record = result.record
     assert record.critique_verdict == "revise"  # never satisfied
-    assert record.critique_iterations == MAX_REVISE_ITERS
+    assert record.critique_iterations == quick_settings.max_revise_iters
     assert record.critique_issues  # last critique's issues recorded
     assert result.record.synthesis_ok is True  # capped, not failed — still a real report

@@ -93,8 +93,6 @@ OUTLINE_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=60_000)
 SECTION_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=40_000)
 CRITIC_LIMITS = UsageLimits(request_limit=4, total_tokens_limit=60_000)
 
-# Max critic-driven revise passes after the first draft (0 disables the critic loop).
-MAX_REVISE_ITERS = 2
 VERIFY_CONCURRENCY = 4
 # Skip verification when less than this fraction of budget remains — synthesis is the payoff
 # and must always be affordable.
@@ -523,8 +521,9 @@ async def _synthesis_stage(
 
             # Critic gate + bounded revise loop (borrowed from the deep-research TS pipeline):
             # grade the draft against the plan's acceptance criteria; on "revise", rewrite the
-            # sections with the critic's guidance, up to MAX_REVISE_ITERS.
-            for iteration in range(MAX_REVISE_ITERS + 1):
+            # sections with the critic's guidance, up to max_revise_iters (0 disables the loop).
+            max_revise_iters = deps.settings.max_revise_iters
+            for iteration in range(max_revise_iters + 1):
                 try:
                     critique = (
                         await _run_agent(
@@ -545,7 +544,7 @@ async def _synthesis_stage(
                 record.critique_verdict = critique.verdict
                 record.critique_issues = list(critique.issues)
                 emit(CritiqueResult(critique.verdict, iteration, len(critique.issues)))
-                if critique.verdict == "ship" or iteration == MAX_REVISE_ITERS:
+                if critique.verdict == "ship" or iteration == max_revise_iters:
                     break
                 try:
                     deps.budget.checkpoint(deps.ledger, "before revise")

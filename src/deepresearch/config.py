@@ -120,6 +120,7 @@ class Settings(BaseSettings):
     models: RoleModels | None = None  # per-role overrides, e.g. DEEPRESEARCH_MODELS__PLANNER=...
     max_cost: float | None = None  # USD; None -> profile default
     verify: bool = True
+    max_revise_iters: int = 2  # critic-driven revise passes after the first draft (0 disables the loop)
     concurrency: int | None = None  # None -> profile default
     output_dir: str = "runs"
 

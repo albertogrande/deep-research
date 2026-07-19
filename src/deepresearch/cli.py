@@ -41,6 +41,7 @@ def _build_settings(
     max_cost: float | None,
     routing: str | None,
     verify: bool | None,
+    max_revise: int | None,
 ) -> Settings:
     overrides = {
         k: v
@@ -50,6 +51,7 @@ def _build_settings(
             "max_cost": max_cost,
             "routing": routing,
             "verify": verify,
+            "max_revise_iters": max_revise,
         }.items()
         if v is not None
     }
@@ -128,6 +130,10 @@ def research(
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="USD cap for this run.")] = None,
     routing: Annotated[str | None, typer.Option("--routing", help="gateway | direct | split.")] = None,
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip claim verification.")] = False,
+    max_revise: Annotated[
+        int | None,
+        typer.Option("--max-revise", help="Critic-driven revise passes (0 disables the critic loop; cheaper)."),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Print run.json to stdout.")] = False,
     plain: Annotated[bool, typer.Option("--plain", help="Line-based progress (no live UI).")] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="No progress output.")] = False,
@@ -135,7 +141,7 @@ def research(
     """Run deep research on QUESTION and write report.md + run.json."""
     from .orchestrator import BudgetFatalError, run_research  # deferred: keeps `--help` fast
 
-    settings = _build_settings(depth, output, max_cost, routing, False if no_verify else None)
+    settings = _build_settings(depth, output, max_cost, routing, False if no_verify else None, max_revise)
 
     silent = quiet or json_output
     use_live = not silent and not plain and err_console.is_terminal

@@ -10,6 +10,52 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 13 — 2026-07-19 — First real cloud run + a min-cost lever (configurable revise loop)
+
+The whole point of a session: the project **finally ran end-to-end in the cloud environment**.
+The user had added `PYDANTIC_AI_GATEWAY_API_KEY` and `LOGFIRE_TOKEN` to the new environment;
+no `ANTHROPIC_API_KEY` (so routing stayed `gateway`, the default, which is exactly what those
+two tokens support). `uv sync` clean, 53 offline tests green.
+
+**Gateway spike re-run, new environment → still green.** Per CLAUDE.md the server-tools spike
+must run once per new environment. `gateway/anthropic:claude-haiku-4-5` + `WebSearchTool` answered
+"1991" through the Gateway; Logfire project URL printed (`algrande/starter-project`), so traces
+land. Verdict unchanged: keep `routing=gateway`. Direct leg skipped (no direct key) — fine.
+
+**Two live runs, both cheap.** Goal was "spend the minimum possible", so both used `--depth quick`,
+all six roles forced to Haiku via `DEEPRESEARCH_MODELS__*`, and `--no-verify`:
+- Run 1 (green-tea benefits, default revise loop): **$0.42**, 194s. Produced a genuinely good,
+  densely-cited report (46 claims, 9 searches). But it tripped the $0.40 cap — the critic **revise
+  loop was ~2/3 of the cost**: it rewrote all 6 sections twice (2 revise passes) and, with Haiku
+  as critic, *never* returned `ship` — it graded `revise` on every pass, so the loop always ran to
+  the cap. The budget checkpoint fires *between* passes, so a run can end a few cents over the cap.
+- Run 2 (first modern Olympics, `--max-revise 0`): **$0.24**, 68s. Critic still grades once (useful
+  signal recorded in run.json) but no rewrite happens. That knocked ~$0.15 off and ~2/3 off wall time.
+
+**The lever I added.** `MAX_REVISE_ITERS` was a hardcoded module constant in `orchestrator.py`.
+Promoted it to a real setting: `Settings.max_revise_iters` (default 2, behavior unchanged),
+threaded through `deps.settings`, with a `--max-revise N` CLI flag and a `.env.example` line.
+`0` disables the revise loop entirely — the cheapest sane config. Kept the architecture rule
+intact (orchestrator still *owns* the loop policy; it just reads the bound from settings now).
+Two test touch-ups: the capped-at-max-iters test now reads `quick_settings.max_revise_iters`
+instead of importing the deleted constant, plus a new test that `max_revise_iters=0` grades once
+and writes the draft with zero rewrites (54 offline tests now).
+
+**Cost insight worth remembering:** at the quick tier the **search cost is the floor** — 3
+researchers × 3 searches = 9 × $0.01 = **$0.09 fixed**, before a single token. Everything else
+(Haiku planning/research/synthesis) is small change. So the cheapest useful run is roughly
+`$0.09 searches + ~$0.10–0.15 Haiku tokens ≈ $0.20–0.25`. To go lower you'd cut searches
+(needs a profile/field change, not just model overrides) — noted, not done.
+
+**Cheapest-run recipe (recorded for future me):**
+`--depth quick --no-verify --max-revise 0 --max-cost 0.25` + all roles Haiku via
+`DEEPRESEARCH_MODELS__*`. ~$0.24, ~70s, still a real cited report.
+
+**Dev-ex:** the Gateway "just worked" with only its own key — no Anthropic key juggling — and
+Logfire lit up with zero extra config beyond the token. The one rough edge is the Haiku-as-critic
+never-ships behavior: fine for cost experiments, but it means the critic loop only adds value with
+a stronger critic model (the standard/deep profiles use Sonnet/Opus for `critic`, which is right).
+
 ## Entry 12 — 2026-07-19 — Repo renamed pydantic → deep-research
 
 The user renamed the GitHub repo `albertogrande/pydantic` → `albertogrande/deep-research` (the
