@@ -10,6 +10,15 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 14 — 2026-07-19 — README refreshed to current state; promoted to main
+
+Doc-only follow-up to entry 13. Brought the README in line with the actual repo: test badge and
+Development section now say **54 offline** (was 53); the critic-gate highlight and the flags table
+document the new `--max-revise` flag (default 2, `0` disables the loop); added a **minimum-cost run**
+line to Usage (`--depth quick --no-verify --max-revise 0` ≈ $0.24, with the note that the 9-search
+`$0.09` floor is the irreducible part and the revise loop is the biggest saveable lever). No code
+change. This session's work was promoted to `main` at the user's explicit request.
+
 ## Entry 13 — 2026-07-19 — First real cloud run + a min-cost lever (configurable revise loop)
 
 The whole point of a session: the project **finally ran end-to-end in the cloud environment**.

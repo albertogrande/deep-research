@@ -6,7 +6,7 @@
 
 Ask a question; get back a cited Markdown report whose every claim has been re-fetched from its source and verified. Built end-to-end on the [Pydantic stack](https://pydantic.dev): [Pydantic AI](https://pydantic.dev/docs/ai/) · [Logfire](https://pydantic.dev/docs/logfire/) · [Pydantic Evals](https://pydantic.dev/docs/ai/evals/) · [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/). Anthropic models only, no other services.
 
-![CI](https://github.com/albertogrande/deep-research/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-53%20offline-brightgreen)
+![CI](https://github.com/albertogrande/deep-research/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11+-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-54%20offline-brightgreen)
 
 </div>
 
@@ -36,7 +36,7 @@ Most open-source "deep research" tools stop at *retrieve and summarize*. **deepr
 
 - **🔬 Claim-level verification** — the differentiator. Each claim is re-checked against its source; verdicts (`supported` / `partial` / `unsupported` / `unverifiable`) drive what reaches the report.
 - **🌊 Iterative, not one-shot** — a gap analyst reviews each wave and asks targeted follow-ups until the question is saturated (bounded by depth, budget, and dedup).
-- **⚖️ Critic gate** — the planner sets acceptance criteria; after synthesis a critic grades the draft against them (coverage, grounding, redundancy, date/tone discipline) and sends it back for up to 2 guidance-driven revise passes. The outline and citation numbering stay fixed across revisions.
+- **⚖️ Critic gate** — the planner sets acceptance criteria; after synthesis a critic grades the draft against them (coverage, grounding, redundancy, date/tone discipline) and sends it back for guidance-driven revise passes (default 2, configurable via `--max-revise`; `0` disables the loop for the cheapest runs). The outline and citation numbering stay fixed across revisions.
 - **🧾 Typed end to end** — every hop is a Pydantic model with validators; the model writes prose, **code owns the citation numbers** (they can't drift).
 - **💸 Deterministic cost control** — structural caps → per-call `UsageLimits` → a priced budget checkpointed between stages, with the Gateway spend cap as backstop. A failed run still writes its artifacts.
 - **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree (`plan → wave n → gap → verification → synthesis → critic`); each `run.json` carries its Logfire trace id.
@@ -84,7 +84,7 @@ Python ≥ 3.11 · [uv](https://docs.astral.sh/uv/). **Costs real money:** web s
 ## Usage
 
 ```bash
-deepresearch "your question" [--depth quick|standard|deep] [--max-cost USD] [--no-verify]
+deepresearch "your question" [--depth quick|standard|deep] [--max-cost USD] [--no-verify] [--max-revise N]
 ```
 
 | Depth | Waves | Synthesis model | Default cap |
@@ -94,6 +94,8 @@ deepresearch "your question" [--depth quick|standard|deep] [--max-cost USD] [--n
 | `deep` | up to 4 | Opus 4.8 | $8.00 |
 
 Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `3` spend refusal · `130` interrupted.
+
+**Minimum-cost run** (~$0.24, still a real cited report): `--depth quick --no-verify --max-revise 0`. At the `quick` tier the search cost is the floor (9 searches × $0.01 = $0.09); the revise loop is the biggest saveable lever, so `--max-revise 0` is where most of the savings come from.
 
 <details>
 <summary>All flags</summary>
@@ -105,6 +107,7 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 | `--max-cost` | USD cap for this run (overrides the profile default) |
 | `--routing` | `gateway` · `direct` · `split` (server-tool roles direct, rest via gateway) |
 | `--no-verify` | skip claim verification |
+| `--max-revise` | critic-driven revise passes (default 2; `0` disables the critic loop — cheapest) |
 | `--json` | print `run.json` to stdout (scriptable) |
 | `--plain` | line-based progress, no live UI |
 | `-q, --quiet` | no progress output |
@@ -127,7 +130,7 @@ Eight question categories (factual, multi-hop, time-sensitive, numeric, conteste
 ## Development
 
 ```bash
-uv run pytest                            # 53 offline tests — TestModel/FunctionModel, no API calls, no cost
+uv run pytest                            # 54 offline tests — TestModel/FunctionModel, no API calls, no cost
 RUN_LIVE_TESTS=1 uv run pytest -m live   # ~$0.05 live smoke (also answers the gateway question)
 uv run python scripts/spike_gateway_server_tools.py   # run once per new environment
 ```
