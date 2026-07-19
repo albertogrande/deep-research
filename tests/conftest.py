@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import os
+
+import logfire
 import pytest
 from pydantic_ai.models.test import TestModel
 
 from deepresearch.config import Settings
+
+# Keep the offline suite hermetic against an ambient LOGFIRE_TOKEN. The orchestrator calls
+# `setup_telemetry()`, which configures Logfire with `send_to_logfire="if-token-present"`. If the
+# developer's shell exports a LOGFIRE_TOKEN (even an invalid one), that resolves to "send", so the
+# `logfire.span(...)` calls in the code under test try to export spans/metrics — hitting the
+# network and spewing 401s, breaking this module's "no test hits the network" promise. Dropping the
+# token from the test environment makes `if-token-present` resolve to offline. No live test gates on
+# LOGFIRE_TOKEN (only the Anthropic/Gateway keys), so this is safe for `RUN_LIVE_TESTS=1` too.
+os.environ.pop("LOGFIRE_TOKEN", None)
+# Belt-and-suspenders: force Logfire offline before any code-under-test configures it lazily.
+logfire.configure(send_to_logfire=False, console=False)
 
 
 @pytest.fixture

@@ -10,6 +10,35 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 13 — 2026-07-19 — The offline suite wasn't hermetic: an ambient LOGFIRE_TOKEN leaked to the network
+
+Ran `uv run pytest -q` in a fresh environment and the "offline" suite — the one CLAUDE.md and
+`conftest.py`'s own docstring both swear "never hits the network" — printed
+`Logfire API returned status code 401. Detail: Invalid token` and two batch-export failures at
+shutdown. All 53 tests passed, but the promise was quietly broken.
+
+**Root cause — a token in the env, not in `.env`.** The offline fixtures build `Settings` with
+`_env_file=None`, so I'd assumed the suite was insulated from ambient config. But `_env_file=None`
+only skips the `.env` *file*; real process env vars still leak through everything else. The chain:
+orchestrator-exercising tests call `setup_telemetry()` → `logfire.configure(send_to_logfire=
+"if-token-present")`. "if-token-present" reads the *ambient* `LOGFIRE_TOKEN`, and this environment
+had one exported that happened to be invalid → every `logfire.span(...)` in the code under test
+tried to export → 401. In CI there's no token, so it stayed silent and nobody noticed. It only
+surfaces on a developer machine that has a (stale/invalid) Logfire token in the shell.
+
+**Fix (in `tests/conftest.py`, the test-env boundary):** `os.environ.pop("LOGFIRE_TOKEN", None)`
+so `if-token-present` correctly resolves to offline no matter what the shell exports, plus a
+belt-and-suspenders `logfire.configure(send_to_logfire=False)`. Checked that no live test gates on
+`LOGFIRE_TOKEN` (they skip only on `ANTHROPIC_API_KEY` / `PYDANTIC_AI_GATEWAY_API_KEY`), so this is
+safe under `RUN_LIVE_TESTS=1` too — it just keeps test-run traces out of a real Logfire project.
+After the change the full suite is silent: `53 passed, 1 skipped`, zero 401s, with the invalid
+token still exported in the shell.
+
+**Learning about the stack:** `send_to_logfire="if-token-present"` is a great keyless-by-default
+ergonomic for the *app*, but it makes the *test* environment porous — presence of any token, valid
+or not, flips behavior. The lesson is to neutralize credentials at the test boundary (conftest),
+not to trust that scripted-model fixtures keep you offline. Cost: $0 (no live calls).
+
 ## Entry 12 — 2026-07-19 — Repo renamed pydantic → deep-research
 
 The user renamed the GitHub repo `albertogrande/pydantic` → `albertogrande/deep-research` (the
