@@ -132,7 +132,9 @@ def research(
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip claim verification.")] = False,
     max_revise: Annotated[
         int | None,
-        typer.Option("--max-revise", help="Critic-driven revise passes (0 disables the critic loop; cheaper)."),
+        typer.Option(
+            "--max-revise", help="Critic-driven revise passes (0 disables the critic loop; cheaper)."
+        ),
     ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Print run.json to stdout.")] = False,
     plain: Annotated[bool, typer.Option("--plain", help="Line-based progress (no live UI).")] = False,
