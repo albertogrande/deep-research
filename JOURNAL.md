@@ -10,6 +10,41 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 9 — 2026-07-19 — Code review: a real UsageLimits bug, and the fix
+
+Ran an xhigh code review over the whole codebase. It surfaced a genuine correctness bug worth
+recording as a stack learning, plus five smaller fixes.
+
+**The bug (would have bitten on the first real run):** I passed one shared per-role `RunUsage`
+accumulator into every `agent.run(usage=…)` so cost accounting could sum per role. But
+pydantic-ai enforces `usage_limits` against *that same object* — I read the installed source to
+confirm: `run()` does `usage = usage or RunUsage()`, seeds `ctx.state.usage` with it, and
+`check_before_request` tests `ctx.state.usage.requests >= request_limit`. So a **shared**
+accumulator makes `UsageLimits` cumulative across sibling runs, not per-run. Consequence: the
+synthesizer's outline + section runs share one accumulator, so `SECTION_LIMITS(request_limit=4)`
+trips `UsageLimitExceeded` after ~2 sections → **every report with 3+ sections would have
+spuriously fallen back to the claims dump.** Same mechanism made `RESEARCHER_LIMITS` a wave-wide
+budget. Proven with a throwaway repro (run 1 ok, runs 2–3 tripped) and now guarded by
+`tests/test_usage_accounting.py`.
+
+**Fix:** each `agent.run` gets its own fresh `RunUsage` (correct per-run limits), merged into
+the role ledger afterwards via `RunUsage.incr` (which also merges the `details` dict, so the
+web-search counters `_reconcile_searches` reads survive). Wrapped in one `_run_agent` helper,
+which also removed the `model=`/`usage=`/`resolve_model` boilerplate duplicated at six call
+sites.
+
+**Stack lesson:** when sharing a `RunUsage` for accounting, remember it is *also* the limit
+enforcement surface — share it only across a genuine parent/child delegation tree (where you
+want tree-wide limits), never across independent sibling runs. The pydantic-ai docs frame
+`usage=` as an accumulator; the limit-coupling is easy to miss.
+
+**Also fixed:** wave-loop budget-fatal path discarded successful researchers' claims (now
+ingests all successes before raising); centralized the routing prefix in
+`config.provider_prefix` so the eval judge can't drift from `resolve_model`; removed a dead
+variable; corrected the CLAUDE.md "pure functions" wording to name the `write_*` I/O boundary.
+Two low-impact items (an O(n²) dedup rebuild; verifier siblings not cancelled on abort) were
+judged not worth the added complexity in v1. Suite: 48 offline tests green.
+
 ## Entry 8 — 2026-07-19 — README polish
 
 Rewrote the README as the project's front door after researching current best practice

@@ -31,9 +31,14 @@ class UsageLedger:
     by_role: dict[str, RunUsage] = field(default_factory=dict)
     searches: int = 0
 
-    def usage_for(self, role: Role) -> RunUsage:
-        """The accumulator to pass as ``usage=`` into every run for this role."""
-        return self.by_role.setdefault(role, RunUsage())
+    def record(self, role: Role, usage: RunUsage) -> None:
+        """Merge one completed run's usage into the role accumulator.
+
+        Each ``agent.run`` gets its OWN ``RunUsage`` (so ``UsageLimits`` is enforced per run,
+        not against the shared role total), then merges here for cost accounting and cost
+        estimation. ``incr`` also merges the ``details`` dict, preserving web-search counters.
+        """
+        self.by_role.setdefault(role, RunUsage()).incr(usage)
 
     def record_searches(self, n: int) -> None:
         self.searches += n

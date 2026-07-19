@@ -139,9 +139,13 @@ class Settings(BaseSettings):
         return getattr(models, role)
 
 
+def provider_prefix(settings: Settings, *, server_tool: bool) -> str:
+    """The pydantic-ai provider prefix for the current routing. ``server_tool`` marks roles
+    that carry Anthropic server-side tools (they go direct under ``routing='split'``)."""
+    direct = settings.routing == "direct" or (settings.routing == "split" and server_tool)
+    return "anthropic:" if direct else "gateway/anthropic:"
+
+
 def resolve_model(role: Role, settings: Settings) -> str:
     """Return the full pydantic-ai model string for a role, including routing prefix."""
-    bare = settings.bare_model(role)
-    if settings.routing == "direct" or (settings.routing == "split" and role in SERVER_TOOL_ROLES):
-        return f"anthropic:{bare}"
-    return f"gateway/anthropic:{bare}"
+    return provider_prefix(settings, server_tool=role in SERVER_TOOL_ROLES) + settings.bare_model(role)

@@ -17,7 +17,9 @@ history in old entries — corrections go in new entries.
   validators — no control flow.
 - `orchestrator.py` owns all sequencing, concurrency, budget enforcement, and error policy
   (via `classify_error`). Agents never decide policy.
-- `digest.py` and `artifacts.py` are pure functions — no model calls, trivially unit-testable.
+- `digest.py` is pure functions only. `artifacts.py` keeps report *assembly* pure (no model
+  calls, golden-testable); the only side effects are the thin `write_*`/`create_run_dir`
+  wrappers that form the file-I/O boundary.
 - `models.py` is the single shared vocabulary (Claim, Findings, GapAnalysis, Verdict,
   RunRecord…) used by agents, orchestrator, artifacts, and evals alike.
 - Model strings are never spelled outside `config.resolve_model()` — routing

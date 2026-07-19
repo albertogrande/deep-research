@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from deepresearch.config import Settings
+from deepresearch.config import Settings, provider_prefix
 from deepresearch.models import RunRecord
 from deepresearch.orchestrator import run_research
 
@@ -29,9 +29,9 @@ class EvalOutput(BaseModel):
 
 def judge_model(settings: Settings) -> str:
     """Judge model for LLMJudge — MUST be explicit: the library default is an OpenAI model
-    and this project has no OpenAI key. Respects the routing setting."""
-    prefix = "anthropic:" if settings.routing == "direct" else "gateway/anthropic:"
-    return f"{prefix}claude-sonnet-4-6"
+    and this project has no OpenAI key. Reuses the routing prefix logic (never a server-tool
+    role) so it can't drift from ``resolve_model``."""
+    return provider_prefix(settings, server_tool=False) + "claude-sonnet-4-6"
 
 
 def make_task(base_settings: Settings):

@@ -16,13 +16,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import logfire
-from pydantic_ai import UsageLimits
+from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.exceptions import (
     ModelAPIError,
     ModelHTTPError,
     UnexpectedModelBehavior,
     UsageLimitExceeded,
 )
+from pydantic_ai.usage import RunUsage
 
 from .agents.gap_analyst import MAX_FOLLOW_UPS, gap_analyst_agent
 from .agents.planner import planner_agent
@@ -135,6 +136,25 @@ class _RunState:
     limitations: list[str] = field(default_factory=list)
 
 
+async def _run_agent(
+    agent: Agent, prompt: str, *, role: Role, deps: Deps, usage_limits: UsageLimits, **kwargs
+):
+    """Run an agent with a FRESH per-run RunUsage (so usage_limits apply to this run alone),
+    merging the result into the role's cumulative ledger afterwards — even on failure."""
+    run_usage = RunUsage()
+    try:
+        return await agent.run(
+            prompt,
+            deps=deps,
+            model=resolve_model(role, deps.settings),
+            usage=run_usage,
+            usage_limits=usage_limits,
+            **kwargs,
+        )
+    finally:
+        deps.ledger.record(role, run_usage)
+
+
 def _researcher_prompt(main_query: str, sq: SubQuestion) -> str:
     return (
         f"Main research question (context only — do not research it directly):\n{main_query}\n\n"
@@ -216,15 +236,10 @@ async def run_research(
 
 async def _plan_stage(query, deps: Deps, record: RunRecord, timings, emit):
     """Planning is fatal on failure: with no plan there is nothing to research."""
-    settings = deps.settings
     t0 = time.perf_counter()
     with logfire.span("plan"):
-        plan_run = await planner_agent.run(
-            query,
-            deps=deps,
-            model=resolve_model("planner", settings),
-            usage=deps.ledger.usage_for("planner"),
-            usage_limits=PLANNER_LIMITS,
+        plan_run = await _run_agent(
+            planner_agent, query, role="planner", deps=deps, usage_limits=PLANNER_LIMITS
         )
     plan = plan_run.output
     record.plan = plan
@@ -242,15 +257,14 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
         with logfire.span("wave {wave}", wave=wave_n, n_questions=len(queue)):
             emit(WaveStarted(wave_n, len(queue)))
             results = await _run_wave(query, queue, deps, emit)
+            # Ingest every successful result first so a spend refusal on one researcher never
+            # discards the claims the others already gathered.
+            budget_fatal: BaseException | None = None
             for sq, res in zip(queue, results, strict=True):
                 if isinstance(res, BaseException):
                     _record_failure(record, state, sq, res, emit)
                     if classify_error(res) is ErrorClass.BUDGET_FATAL:
-                        state.limitations.append(
-                            f"aborted in wave {wave_n}: provider/gateway refused on spend grounds"
-                        )
-                        record.waves_run = wave_n
-                        raise BudgetFatalError(str(res)) from res
+                        budget_fatal = res
                 else:
                     state.notes_by_sq[sq.id] = res.notes
                     state.claims.extend(
@@ -262,6 +276,12 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
                             existing=state.claims,
                         )
                     )
+            if budget_fatal is not None:
+                state.limitations.append(
+                    f"aborted in wave {wave_n}: provider/gateway refused on spend grounds"
+                )
+                record.waves_run = wave_n
+                raise BudgetFatalError(str(budget_fatal)) from budget_fatal
         timings[f"wave_{wave_n}"] = time.perf_counter() - t0
         record.waves_run = wave_n
         emit(CostUpdate(deps.budget.estimate(deps.ledger), deps.budget.max_cost_usd))
@@ -292,19 +312,14 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
 
 async def _gap_stage(query, done_criteria, deps: Deps, record, state: _RunState, timings, emit):
     """Gap analysis is degradable: on failure we just stop iterating and synthesize."""
-    settings = deps.settings
     t0 = time.perf_counter()
     digest = gap_digest(
         query, list(done_criteria), state.sub_questions, state.claims, state.notes_by_sq, state.failed_sq_ids
     )
     try:
         with logfire.span("gap analysis"):
-            gap_run = await gap_analyst_agent.run(
-                digest,
-                deps=deps,
-                model=resolve_model("gap_analyst", settings),
-                usage=deps.ledger.usage_for("gap_analyst"),
-                usage_limits=GAP_LIMITS,
+            gap_run = await _run_agent(
+                gap_analyst_agent, digest, role="gap_analyst", deps=deps, usage_limits=GAP_LIMITS
             )
     except Exception as e:
         if classify_error(e) is ErrorClass.BUDGET_FATAL:
@@ -342,11 +357,11 @@ async def _verification_stage(deps: Deps, record: RunRecord, state: _RunState, t
     async def verify_source(url: str, claims: list[Claim]) -> SourceVerification:
         async with sem:
             try:
-                result = await verifier_agent.run(
+                result = await _run_agent(
+                    verifier_agent,
                     verify_prompt(url, claims),
+                    role="verifier",
                     deps=deps,
-                    model=resolve_model("verifier", settings),
-                    usage=deps.ledger.usage_for("verifier"),
                     usage_limits=VERIFIER_LIMITS,
                 )
                 sv = result.output
@@ -390,13 +405,11 @@ async def _verification_stage(deps: Deps, record: RunRecord, state: _RunState, t
             if v.claim_id in valid_ids and v.claim_id in cited_ids_by_source[url]:
                 verdict_by_claim.setdefault(v.claim_id, v)
     # Backfill claims the verifier skipped — never silently treated as supported.
-    unverified_backlog = 0
     for c in state.claims:
         if c.id not in verdict_by_claim:
             verdict_by_claim[c.id] = Verdict(
                 claim_id=c.id, verdict="unverifiable", reasoning="verifier returned no verdict"
             )
-            unverified_backlog += 1
 
     record.verdicts = [verdict_by_claim[c.id] for c in state.claims]
     timings["verification"] = time.perf_counter() - t0
@@ -441,7 +454,6 @@ async def _synthesis_stage(
     query: str, deps: Deps, record: RunRecord, state: _RunState, run_dir: Path, timings, emit
 ) -> Path | None:
     """Always attempted (it is the payoff); degrades to a claims-dump artifact on failure."""
-    settings = deps.settings
     usable, verdict_by_claim = _usable_claims(state, record)
     if not usable:
         state.limitations.append("no usable claims gathered; no report generated")
@@ -462,11 +474,11 @@ async def _synthesis_stage(
                 if verdict_by_claim.get(c.id) and verdict_by_claim[c.id].verdict == "supported"
             )
             emit(SynthesisStage("outline"))
-            outline_run = await outline_agent.run(
+            outline_run = await _run_agent(
+                outline_agent,
                 outline_digest(query, done_criteria, state.sub_questions, usable, verdict_by_claim),
+                role="synthesizer",
                 deps=deps,
-                model=resolve_model("synthesizer", settings),
-                usage=deps.ledger.usage_for("synthesizer"),
                 usage_limits=OUTLINE_LIMITS,
             )
             outline = outline_run.output
@@ -476,11 +488,11 @@ async def _synthesis_stage(
             for i, section in enumerate(outline.sections, start=1):
                 emit(SynthesisStage("section", i, len(outline.sections)))
                 section_claims = [claims_by_id[cid] for cid in section.claim_ids if cid in claims_by_id]
-                section_run = await section_agent.run(
+                section_run = await _run_agent(
+                    section_agent,
                     section_prompt(section, section_claims, citations, verdict_by_claim),
+                    role="synthesizer",
                     deps=deps,
-                    model=resolve_model("synthesizer", settings),
-                    usage=deps.ledger.usage_for("synthesizer"),
                     usage_limits=SECTION_LIMITS,
                 )
                 bodies.append(section_run.output.markdown)
@@ -523,11 +535,11 @@ async def _run_wave(
     agent = researcher_agent(settings.prof.searches_per_researcher)
 
     async def attempt(sq: SubQuestion) -> Findings:
-        result = await agent.run(
+        result = await _run_agent(
+            agent,
             _researcher_prompt(main_query, sq),
+            role="researcher",
             deps=deps,
-            model=resolve_model("researcher", settings),
-            usage=deps.ledger.usage_for("researcher"),
             usage_limits=RESEARCHER_LIMITS,
         )
         # Conservative upper bound until _reconcile_searches finds real counters.
