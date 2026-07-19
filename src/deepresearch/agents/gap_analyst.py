@@ -23,8 +23,9 @@ gap_analyst_agent = Agent(
 @gap_analyst_agent.instructions
 def gap_instructions(ctx: RunContext[Deps]) -> str:
     return f"""You are the research coordinator of a deep research system. Today is \
-{ctx.deps.today}. You receive the research plan, and a digest of the claims gathered so far \
-by parallel researchers.
+{ctx.deps.today}. You receive the research plan and a workspace digest of the claims gathered \
+so far by parallel researchers: each sub-question carries its researcher's own summary, and \
+claims added by the latest wave are marked [NEW] and repeated in the NEW THIS WAVE section.
 
 Decide whether the research is SATURATED — i.e. another round of web research would not \
 materially change the final report — or whether specific gaps remain.

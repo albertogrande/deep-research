@@ -10,6 +10,46 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 15 — 2026-07-19 — Per-branch compression + evolving central digest (IterResearch-style)
+
+First phase of the "SOTA-comparable" effort planned this session (research: Tongyi's IterResearch
+per-round workspace reconstruction is the best-measured scaffold technique, +14.5pp in their
+ablation; LangChain's open_deep_research ships per-branch compression too). The shape adapted
+to this codebase:
+
+- **Compression rides the researcher's existing structured output.** `Findings` gained a
+  `summary` field (2–4 sentences: what was established, what wasn't). The researcher writes it
+  in the same call that produces the claims — zero extra requests, zero extra cost. No separate
+  compressor agent.
+- **`central_digest()` is the evolving workspace** — and "evolving" here means *rebuilt from
+  typed state every round*, never appended to. Per sub-question: the researcher's own summary,
+  claim/source counts, and a capped claim listing (8/sq; hidden claims are counted, never lost —
+  caps shape what agents see, not what the run records). A code-computed **NEW THIS WAVE**
+  section (from `claim.wave == current_wave`) plus inline `[NEW]` markers let the gap analyst
+  judge the marginal value of the last wave at a glance — groundwork for evidence-aware stopping
+  in a later phase.
+- **`known_so_far_brief()`** injects an ALREADY ESTABLISHED block into wave ≥2 researcher
+  prompts, built from the wave-1 summaries. Hard-capped at 2400 chars (~600 tokens, asserted in
+  tests by character count) with squeeze-then-drop-oldest degradation. Wave-1 researchers stay
+  fully isolated — parallelism and independence are the point of the fan-out; context awareness
+  only pays once there is context.
+- `gap_digest()` now delegates its body to `central_digest()` and keeps only the
+  ALREADY-ASKED-QUESTIONS tail. Orchestrator plumbing: `_RunState.summaries_by_sq`, ingested
+  next to `notes_by_sq`.
+
+Dev-ex notes: the FunctionModel prompt-inspection pattern (grab the prompt text out of
+`messages`, key it by `sq-NN`) keeps proving itself — the new test asserts wave-2 prompts
+contain the brief and wave-1 prompts don't, fully offline. Because `summary` has a default,
+every existing TestModel fixture kept working untouched; only `FINDINGS_ARGS` gained the field
+so the wave test could assert the summary text lands in the wave-2 prompt. 59 offline tests
+green (was 54). Also fixed a pre-existing `ruff format` drift in `cli.py` that would have
+failed CI's format check on the next PR.
+
+Accepted limitation: the researcher *writes* its summary but nothing enforces quality — a lazy
+model can emit one sentence. Fine: the digest falls back to claim counts when the summary is
+empty, and the claim listing is the ground truth anyway. Cost of this entry: **$0** (offline
+only, by explicit user decision for this whole effort).
+
 ## Entry 14 — 2026-07-19 — README refreshed to current state; promoted to main
 
 Doc-only follow-up to entry 13. Brought the README in line with the actual repo: test badge and

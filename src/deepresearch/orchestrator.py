@@ -49,6 +49,7 @@ from .digest import (
     enrich_and_dedup_claims,
     gap_digest,
     group_claims_by_url,
+    known_so_far_brief,
     outline_digest,
     section_prompt,
 )
@@ -143,6 +144,7 @@ class _RunState:
     sub_questions: list[SubQuestion] = field(default_factory=list)
     seen_questions: set[str] = field(default_factory=set)
     notes_by_sq: dict[str, str] = field(default_factory=dict)
+    summaries_by_sq: dict[str, str] = field(default_factory=dict)
     failed_sq_ids: set[str] = field(default_factory=set)
     limitations: list[str] = field(default_factory=list)
 
@@ -166,12 +168,15 @@ async def _run_agent(
         deps.ledger.record(role, run_usage)
 
 
-def _researcher_prompt(main_query: str, sq: SubQuestion) -> str:
-    return (
+def _researcher_prompt(main_query: str, sq: SubQuestion, known_so_far: str = "") -> str:
+    prompt = (
         f"Main research question (context only — do not research it directly):\n{main_query}\n\n"
         f"YOUR sub-question ({sq.id}):\n{sq.question}\n\n"
         f"Why it matters: {sq.rationale}"
     )
+    if known_so_far:
+        prompt += f"\n\n{known_so_far}"
+    return prompt
 
 
 def _reconcile_searches(ledger: UsageLedger) -> None:
@@ -266,9 +271,15 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
 
     for wave_n in range(1, settings.prof.max_waves + 1):
         t0 = time.perf_counter()
+        # Wave-1 researchers run isolated (full parallelism, no shared context to bias them);
+        # later waves get a compressed what-we-know brief so follow-ups target the gap.
+        known = ""
+        if wave_n > 1:
+            prior_sqs = [sq for sq in state.sub_questions if sq.wave < wave_n]
+            known = known_so_far_brief(prior_sqs, state.summaries_by_sq, state.claims)
         with logfire.span("wave {wave}", wave=wave_n, n_questions=len(queue)):
             emit(WaveStarted(wave_n, len(queue)))
-            results = await _run_wave(query, queue, deps, emit)
+            results = await _run_wave(query, queue, deps, emit, known_so_far=known)
             # Ingest every successful result first so a spend refusal on one researcher never
             # discards the claims the others already gathered.
             budget_fatal: BaseException | None = None
@@ -279,6 +290,7 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
                         budget_fatal = res
                 else:
                     state.notes_by_sq[sq.id] = res.notes
+                    state.summaries_by_sq[sq.id] = res.summary
                     state.claims.extend(
                         enrich_and_dedup_claims(
                             res.claims,
@@ -326,7 +338,14 @@ async def _gap_stage(query, done_criteria, deps: Deps, record, state: _RunState,
     """Gap analysis is degradable: on failure we just stop iterating and synthesize."""
     t0 = time.perf_counter()
     digest = gap_digest(
-        query, list(done_criteria), state.sub_questions, state.claims, state.notes_by_sq, state.failed_sq_ids
+        query,
+        list(done_criteria),
+        state.sub_questions,
+        state.claims,
+        state.summaries_by_sq,
+        state.notes_by_sq,
+        state.failed_sq_ids,
+        current_wave=record.waves_run,
     )
     try:
         with logfire.span("gap analysis"):
@@ -583,6 +602,7 @@ async def _run_wave(
     queue: list[SubQuestion],
     deps: Deps,
     emit: Callable[[ProgressEvent], None],
+    known_so_far: str = "",
 ) -> list[Findings | BaseException]:
     settings = deps.settings
     sem = asyncio.Semaphore(settings.effective_concurrency)
@@ -591,7 +611,7 @@ async def _run_wave(
     async def attempt(sq: SubQuestion) -> Findings:
         result = await _run_agent(
             agent,
-            _researcher_prompt(main_query, sq),
+            _researcher_prompt(main_query, sq, known_so_far),
             role="researcher",
             deps=deps,
             usage_limits=RESEARCHER_LIMITS,

@@ -189,35 +189,116 @@ def group_claims_by_url(claims: list[Claim]) -> dict[str, list[Claim]]:
     return grouped
 
 
-def gap_digest(
+# Per-sub-question claim listing cap inside digests. Claims beyond the cap are counted, not
+# shown — they always remain in the RunRecord and the report.
+DIGEST_CLAIMS_PER_SQ = 8
+# known_so_far_brief stays under ~600 tokens so it never crowds a researcher's own context.
+BRIEF_CHAR_BUDGET = 2400
+
+
+def central_digest(
     query: str,
     done_criteria: list[str],
     sub_questions: list[SubQuestion],
     claims: list[Claim],
+    summaries_by_sq: dict[str, str],
     notes_by_sq: dict[str, str],
     failed_sq_ids: set[str],
+    *,
+    current_wave: int,
 ) -> str:
-    """Render what the gap analyst sees: statements, counts, domains, notes — never quotes,
-    never full URLs. Keeps a standard run's digest well under ~3k tokens."""
+    """The evolving central workspace: rebuilt from typed state every round, never appended to.
+    Per sub-question: the researcher's own summary, claim counts, and a capped claim listing —
+    never quotes, never full URLs. Ends with a code-computed NEW THIS WAVE section so a reader
+    can judge the marginal value of the last wave at a glance."""
     by_sq: dict[str, list[Claim]] = {}
     for c in claims:
         by_sq.setdefault(c.sub_question_id, []).append(c)
 
     lines: list[str] = [f"MAIN QUESTION: {query}", "", "DONE CRITERIA:"]
     lines += [f"- {d}" for d in done_criteria]
-    lines += ["", "SUB-QUESTIONS AND CLAIMS SO FAR:"]
+    lines += ["", f"RESEARCH WORKSPACE (wave {current_wave} just completed):"]
     for sq in sub_questions:
         sq_claims = by_sq.get(sq.id, [])
         domains = sorted({canonical_url(c.source_url).split("/")[0] for c in sq_claims})
         status = " [RESEARCHER FAILED]" if sq.id in failed_sq_ids else ""
         lines.append(f"\n{sq.id} (wave {sq.wave}){status}: {sq.question}")
+        if summary := summaries_by_sq.get(sq.id, "").strip():
+            lines.append(f"  summary: {summary}")
         lines.append(f"  claims: {len(sq_claims)} | distinct sources: {len(domains)}")
-        for c in sq_claims:
+        for c in sq_claims[:DIGEST_CLAIMS_PER_SQ]:
             corroborated = f" (x{c.corroborations + 1})" if c.corroborations else ""
-            lines.append(f"  - [{c.confidence}] {c.statement}{corroborated}")
+            new = " [NEW]" if c.wave == current_wave else ""
+            lines.append(f"  - [{c.confidence}]{new} {c.statement}{corroborated}")
+        if (hidden := len(sq_claims) - DIGEST_CLAIMS_PER_SQ) > 0:
+            lines.append(f"  (+{hidden} more claims not shown)")
         if notes := notes_by_sq.get(sq.id, "").strip():
             lines.append(f"  researcher notes: {notes}")
-    lines += ["", "ALREADY-ASKED QUESTIONS (follow-ups must NOT restate these):"]
+
+    fresh = [c for c in claims if c.wave == current_wave]
+    lines += ["", f"NEW THIS WAVE (wave {current_wave}): {len(fresh)} new claim(s)"]
+    for c in fresh[:DIGEST_CLAIMS_PER_SQ]:
+        lines.append(f"- {c.statement} ({c.sub_question_id})")
+    if len(fresh) > DIGEST_CLAIMS_PER_SQ:
+        lines.append(f"(+{len(fresh) - DIGEST_CLAIMS_PER_SQ} more)")
+    return "\n".join(lines)
+
+
+def known_so_far_brief(
+    sub_questions: list[SubQuestion],
+    summaries_by_sq: dict[str, str],
+    claims: list[Claim],
+) -> str:
+    """A compact what-we-already-know brief injected into later-wave researcher prompts,
+    built from the per-branch summaries (falling back to claim counts). Hard-capped at
+    ~600 tokens so it informs the researcher without crowding their own work."""
+    counts: dict[str, int] = {}
+    for c in claims:
+        counts[c.sub_question_id] = counts.get(c.sub_question_id, 0) + 1
+
+    entries: list[str] = []
+    for sq in sub_questions:
+        n = counts.get(sq.id, 0)
+        summary = summaries_by_sq.get(sq.id, "").strip()
+        if not summary:
+            summary = "no summary; see claim count" if n else "nothing established"
+        entries.append(f"- {sq.question} ({n} claim(s)): {summary}")
+    if not entries:
+        return ""
+
+    header = "ALREADY ESTABLISHED by earlier waves (do not re-research this; target the gap):"
+    body = "\n".join([header, *entries])
+    if len(body) > BRIEF_CHAR_BUDGET:  # first squeeze each summary, then drop oldest entries
+        entries = [e if len(e) <= 200 else e[:197] + "..." for e in entries]
+        while entries and len("\n".join([header, *entries])) > BRIEF_CHAR_BUDGET - 30:
+            entries.pop(0)
+        body = "\n".join([header, "(earliest findings omitted for space)", *entries])
+    return body
+
+
+def gap_digest(
+    query: str,
+    done_criteria: list[str],
+    sub_questions: list[SubQuestion],
+    claims: list[Claim],
+    summaries_by_sq: dict[str, str],
+    notes_by_sq: dict[str, str],
+    failed_sq_ids: set[str],
+    *,
+    current_wave: int,
+) -> str:
+    """What the gap analyst sees: the central workspace plus the already-asked-questions tail."""
+    workspace = central_digest(
+        query,
+        done_criteria,
+        sub_questions,
+        claims,
+        summaries_by_sq,
+        notes_by_sq,
+        failed_sq_ids,
+        current_wave=current_wave,
+    )
+    lines = [workspace, "", "ALREADY-ASKED QUESTIONS (follow-ups must NOT restate these):"]
     lines += [f"- {sq.question}" for sq in sub_questions]
     return "\n".join(lines)
 

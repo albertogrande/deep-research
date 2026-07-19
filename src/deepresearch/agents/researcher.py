@@ -46,6 +46,10 @@ not belong in the output.
 - Record dead ends, paywalls, contradictions between sources, and anything a coordinator \
 should know in `notes`. If you find genuinely nothing, return zero claims and explain why in \
 `notes` — that is a valid result.
+- End with `summary`: 2-4 sentences stating what you established for your sub-question and \
+what you could not — this becomes the coordinator's compressed view of your work.
+- If the prompt includes an ALREADY ESTABLISHED block, do not re-research any of it; \
+target exactly the gap your sub-question names.
 
 Quality over quantity: 3-8 strong claims beat 20 weak ones."""
 

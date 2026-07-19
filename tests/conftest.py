@@ -41,6 +41,7 @@ FINDINGS_ARGS = {
     ],
     "search_queries_used": ["capital of France"],
     "notes": "",
+    "summary": "Established the capital and its population; no open questions.",
 }
 
 

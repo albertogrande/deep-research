@@ -63,6 +63,10 @@ class Findings(BaseModel):
         default="",
         description="Dead ends, paywalls, ambiguity, or context the gap analyst should know.",
     )
+    summary: str = Field(
+        default="",
+        description="2-4 sentences: what you established for your sub-question and what you could not.",
+    )
 
 
 class Claim(RawClaim):

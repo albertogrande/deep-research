@@ -124,6 +124,36 @@ async def test_budget_breach_stops_new_waves_but_run_completes(std_settings, std
     assert record.claims  # wave-1 claims survive
 
 
+async def test_wave2_researchers_get_known_so_far_brief(std_settings, std_plan_args):
+    follow_ups = [{"question": "How has the population changed since 2000?", "rationale": "gap"}]
+    prompts_by_sq: dict[str, str] = {}
+
+    def recording_researcher(messages, info: AgentInfo) -> ModelResponse:
+        prompt = "".join(
+            str(getattr(part, "content", "")) for m in messages for part in getattr(m, "parts", [])
+        )
+        sq_id = next((f"sq-{i:02d}" for i in range(1, 9) if f"sq-{i:02d}" in prompt), "unknown")
+        prompts_by_sq[sq_id] = prompt
+        output_tool = info.output_tools[0]
+        return ModelResponse(parts=[ToolCallPart(output_tool.name, FINDINGS_ARGS)])
+
+    r_agent = researcher_agent(std_settings.prof.searches_per_researcher)
+    with (
+        planner_agent.override(model=TestModel(custom_output_args=std_plan_args)),
+        r_agent.override(model=FunctionModel(recording_researcher), native_tools=[]),
+        gap_analyst_agent.override(model=gap_model(saturated=False, follow_ups=follow_ups)),
+    ):
+        result = await run_research(QUERY, std_settings)
+
+    assert result.record.waves_run == 2
+    for sq_id in ("sq-01", "sq-02", "sq-03"):  # wave 1: isolated researchers
+        assert "ALREADY ESTABLISHED" not in prompts_by_sq[sq_id]
+    wave2_prompt = prompts_by_sq["sq-04"]
+    assert "ALREADY ESTABLISHED" in wave2_prompt
+    # The brief is built from the wave-1 researchers' own summaries.
+    assert FINDINGS_ARGS["summary"] in wave2_prompt
+
+
 async def test_transient_researcher_error_retried_once(std_settings, std_plan_args, monkeypatch):
     monkeypatch.setattr(orch, "TRANSIENT_RETRY_DELAY_S", 0)
     from pydantic_ai.exceptions import ModelHTTPError
