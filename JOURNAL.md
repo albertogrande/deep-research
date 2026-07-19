@@ -10,6 +10,15 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 12 — 2026-07-19 — Repo renamed pydantic → deep-research
+
+The user renamed the GitHub repo `albertogrande/pydantic` → `albertogrande/deep-research` (the
+package was always `deepresearch`; the repo name now matches). GitHub surfaced it as a "repository
+moved" redirect on push — harmless, pushes still landed correctly, verified by SHA. Repointed the
+local git remote to the new path (proxy accepts it; `ls-remote` confirmed) and updated the one
+tracked reference to the old name (the README CI badge). Local working directory is still
+`/home/user/pydantic` — cosmetic only, left as-is.
+
 ## Entry 11 — 2026-07-19 — Borrowed a critic gate + revise loop from a sibling deep-research repo
 
 The user pointed me at their *other* deep-research project — `albertogrande/deep-research`, a
