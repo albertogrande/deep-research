@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
 from .models import Claim, OutlineSection, PlannedSubQuestion, RawClaim, SubQuestion, Verdict
@@ -42,6 +43,29 @@ def canonical_url(url: str) -> str:
     return f"{host}{path}"
 
 
+def url_host(url: str) -> str:
+    return canonical_url(url).split("/")[0]
+
+
+# Near-duplicate thresholds are deliberately conservative: exact-match keys already catch
+# case/punctuation variants; similarity only folds small insertions and token reorders.
+# A false positive silently drops a genuinely new question/claim — worse than a rare dup.
+QUESTION_SIMILARITY_THRESHOLD = 0.85
+CLAIM_SIMILARITY_THRESHOLD = 0.9
+
+
+def similarity(a: str, b: str) -> float:
+    """Deterministic, embedding-free near-duplicate score in [0, 1] over two PRE-NORMALIZED
+    strings (normalize_question/normalize_statement output): max of character-level
+    SequenceMatcher ratio (catches small insertions) and token-set Jaccard (catches reorders)."""
+    if not a or not b:
+        return 0.0
+    ratio = SequenceMatcher(None, a, b).ratio()
+    ta, tb = set(a.split()), set(b.split())
+    jaccard = len(ta & tb) / len(ta | tb) if (ta or tb) else 0.0
+    return max(ratio, jaccard)
+
+
 def assign_sub_question_ids(
     planned: list[PlannedSubQuestion], *, wave: int, start_index: int = 1
 ) -> list[SubQuestion]:
@@ -53,13 +77,17 @@ def assign_sub_question_ids(
 
 
 def dedup_questions(planned: list[PlannedSubQuestion], seen_normalized: set[str]) -> list[PlannedSubQuestion]:
-    """Drop questions already asked (mutates seen_normalized with the survivors)."""
+    """Drop questions already asked — exactly (normalized key) or nearly (similarity against
+    every seen question). Mutates seen_normalized with the survivors."""
     fresh: list[PlannedSubQuestion] = []
     for p in planned:
         key = normalize_question(p.question)
-        if key and key not in seen_normalized:
-            seen_normalized.add(key)
-            fresh.append(p)
+        if not key or key in seen_normalized:
+            continue
+        if any(similarity(key, seen) >= QUESTION_SIMILARITY_THRESHOLD for seen in seen_normalized):
+            continue
+        seen_normalized.add(key)
+        fresh.append(p)
     return fresh
 
 
@@ -108,13 +136,15 @@ def outline_digest(
 
     lines = [f"MAIN QUESTION: {query}", "", "DONE CRITERIA:"]
     lines += [f"- {d}" for d in done_criteria]
-    lines += ["", "VERIFIED CLAIMS (grouped by sub-question):"]
+    lines += ["", "VERIFIED CLAIMS (grouped by sub-question, strongest evidence first):"]
     for sq in sub_questions:
         sq_claims = by_sq.get(sq.id, [])
         if not sq_claims:
             continue
         lines.append(f"\n{sq.id}: {sq.question}")
-        for c in sq_claims:
+        # Rank-ordered but NEVER truncated: the outline validator requires supported claims
+        # to be assigned to sections, so the outline agent must see every claim id.
+        for c in rank_claims(sq_claims):
             verdict = verdict_by_claim[c.id].verdict if c.id in verdict_by_claim else "unverified"
             lines.append(f"  - {c.id} [{verdict}] {c.statement} (source: {c.source_title})")
     return "\n".join(lines)
@@ -190,8 +220,10 @@ def group_claims_by_url(claims: list[Claim]) -> dict[str, list[Claim]]:
 
 
 # Per-sub-question claim listing cap inside digests. Claims beyond the cap are counted, not
-# shown — they always remain in the RunRecord and the report.
+# shown — they always remain in the RunRecord and the report. When the cap binds, the listing
+# is rank-ordered and domain-capped so what survives is the best cross-source evidence.
 DIGEST_CLAIMS_PER_SQ = 8
+DIGEST_MAX_PER_DOMAIN = 3
 # known_so_far_brief stays under ~600 tokens so it never crowds a researcher's own context.
 BRIEF_CHAR_BUDGET = 2400
 
@@ -226,11 +258,14 @@ def central_digest(
         if summary := summaries_by_sq.get(sq.id, "").strip():
             lines.append(f"  summary: {summary}")
         lines.append(f"  claims: {len(sq_claims)} | distinct sources: {len(domains)}")
-        for c in sq_claims[:DIGEST_CLAIMS_PER_SQ]:
+        shown = sq_claims
+        if len(shown) > DIGEST_CLAIMS_PER_SQ:
+            shown = cap_per_domain(rank_claims(sq_claims), DIGEST_MAX_PER_DOMAIN)[:DIGEST_CLAIMS_PER_SQ]
+        for c in shown:
             corroborated = f" (x{c.corroborations + 1})" if c.corroborations else ""
             new = " [NEW]" if c.wave == current_wave else ""
             lines.append(f"  - [{c.confidence}]{new} {c.statement}{corroborated}")
-        if (hidden := len(sq_claims) - DIGEST_CLAIMS_PER_SQ) > 0:
+        if (hidden := len(sq_claims) - len(shown)) > 0:
             lines.append(f"  (+{hidden} more claims not shown)")
         if notes := notes_by_sq.get(sq.id, "").strip():
             lines.append(f"  researcher notes: {notes}")
@@ -311,16 +346,30 @@ def enrich_and_dedup_claims(
     date_accessed: str,
     existing: list[Claim],
 ) -> list[Claim]:
-    """Assign claim ids and fold duplicates (same canonical URL + normalized statement)
-    into the existing claim's ``corroborations`` counter. Returns only the new claims;
-    numbering continues from ``existing``."""
+    """Assign claim ids and fold duplicates into ``corroborations``. Same-source duplicates
+    (exact normalized statement, or near-duplicate wording) are dropped — they add nothing.
+    CROSS-source near-duplicates are kept (a distinct source is distinct citation value), but
+    both sides' ``corroborations`` increment, making the counter a real cross-source signal.
+    Returns only the new claims; numbering continues from ``existing``."""
     index = {(canonical_url(c.source_url), normalize_statement(c.statement)): c for c in existing}
     new_claims: list[Claim] = []
     next_n = len(existing) + 1
     for rc in raw:
-        key = (canonical_url(rc.source_url), normalize_statement(rc.statement))
-        if key in index:
-            index[key].corroborations += 1
+        canon, norm = canonical_url(rc.source_url), normalize_statement(rc.statement)
+        if (canon, norm) in index:
+            index[(canon, norm)].corroborations += 1
+            continue
+        same_source_dup = False
+        cross_source_matches: list[Claim] = []
+        for (c_canon, c_norm), c in index.items():
+            if similarity(norm, c_norm) < CLAIM_SIMILARITY_THRESHOLD:
+                continue
+            if c_canon == canon:
+                c.corroborations += 1
+                same_source_dup = True
+                break
+            cross_source_matches.append(c)
+        if same_source_dup:
             continue
         claim = Claim(
             id=f"c-{next_n:03d}",
@@ -329,7 +378,32 @@ def enrich_and_dedup_claims(
             date_accessed=date_accessed,
             **rc.model_dump(),
         )
-        index[key] = claim
+        for match in cross_source_matches:
+            match.corroborations += 1
+            claim.corroborations += 1
+        index[(canon, norm)] = claim
         new_claims.append(claim)
         next_n += 1
     return new_claims
+
+
+_CONFIDENCE_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
+def rank_claims(claims: list[Claim]) -> list[Claim]:
+    """Order for digest listings: confidence tier, then cross-source corroboration, then
+    earliest wave. Stable, so equal claims keep their gathering order."""
+    return sorted(claims, key=lambda c: (_CONFIDENCE_ORDER[c.confidence], -c.corroborations, c.wave))
+
+
+def cap_per_domain(claims: list[Claim], max_per_domain: int) -> list[Claim]:
+    """Keep at most ``max_per_domain`` claims per source host (order-preserving), so one
+    over-quoted domain cannot monopolize a digest listing."""
+    counts: dict[str, int] = {}
+    kept: list[Claim] = []
+    for c in claims:
+        host = url_host(c.source_url)
+        if counts.get(host, 0) < max_per_domain:
+            counts[host] = counts.get(host, 0) + 1
+            kept.append(c)
+    return kept

@@ -10,6 +10,39 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 16 — 2026-07-19 — Context hygiene: semantic dedup, claim ranking, per-domain caps
+
+Phase 2 of the SOTA effort — the Jina node-DeepResearch recipe (embedding dedup + URL ranking)
+adapted to this repo's constraints. The constraint that shaped everything: **Anthropic-only
+means no embedding endpoint**, and a Haiku-judge dedup would add per-wave spend and latency
+for marginal gain at this scale (dozens of claims, not thousands). So dedup is embedding-free
+and deterministic: `similarity()` = max of character-level `difflib.SequenceMatcher` ratio
+(catches small insertions — "capital" vs "capital city") and token-set Jaccard (catches
+reorders — "France's capital is Paris" vs "Paris is France's capital"). Runs offline, costs
+nothing, fully unit-testable.
+
+Decisions worth recording:
+- **Thresholds are conservative by design** (0.85 questions / 0.9 claims on pre-normalized
+  text). A false-positive dedup silently drops a genuinely new question — strictly worse than
+  letting the occasional paraphrase through. Measured on fixture pairs in tests: true
+  paraphrases score 0.87–1.0, genuinely different questions 0.17–0.68 — comfortable margin.
+- **Cross-source near-duplicates are kept, not folded.** A second source saying the same thing
+  is distinct citation value. Instead, both sides' `corroborations` increment — the counter is
+  now a real cross-source signal (it previously only counted exact same-source resightings),
+  which feeds directly into ranking and, next phase, the gap analyst's stopping rubric.
+- **Ranking and caps shape what agents SEE, never what the run records.** `rank_claims`
+  (confidence tier → corroborations → earliest wave) + `cap_per_domain(3)` apply only when a
+  digest listing exceeds its cap; `RunRecord` and the report keep everything.
+- **One deliberate deviation from the phase plan**: the plan said to cap `outline_digest` too.
+  Reading the outline validator killed that idea — it *requires* ≥70% of supported claims
+  assigned to sections, and the outline agent can only assign ids it saw. Capping there would
+  either break the retry loop or silently drop claims from the report (invariant violation).
+  So `outline_digest` is rank-ordered (strongest evidence first) but never truncated.
+
+One existing test had to change semantics: the Phase-1 listing-cap test used 11 same-host
+claims, which the new domain cap squeezes to 3 — updated to distinct hosts so each mechanism
+is tested in isolation. 66 offline tests green. Cost: **$0** (offline only).
+
 ## Entry 15 — 2026-07-19 — Per-branch compression + evolving central digest (IterResearch-style)
 
 First phase of the "SOTA-comparable" effort planned this session (research: Tongyi's IterResearch
