@@ -10,6 +10,31 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 27 — 2026-07-20 — DX one-pager, second pass: scannable severity (win/ask/blocker badges)
+
+Follow-up polish on `docs/index.html` (entry 26) after reviewing the rendered page. Three changes,
+all information-design: (1) dropped the hero meta-chips row (noise above the fold); (2) **paired the
+two first-person sections — human onboarding DX and agent DX — at the bottom**, right before Top DX
+asks, so the per-product feedback (AI / Logfire / Evals / Gateway) stays the scannable spine and the
+"both sides of the build" reflection reads as one unit leading into the asks; (3) the real fix —
+**every feedback line is now a badge-led row on a fixed left column**, colored by a traffic-light
+status palette (`win` green / `ask` amber / `blocker` red-filled / `note` muted), with a legend under
+the Verdict. Items run win→ask→blocker within each section, so type also groups visually without
+sub-headers. Status colors are deliberately **separate from the brand-pink accent** (pink stays for
+wayfinding — eyebrows, links, the numbered asks); overloading one hue for both brand and severity was
+why the first cut "all seemed mixed."
+
+Dev-ex note worth recording — **push auth in this environment.** The remote is SSH
+(`git@github.com:albertogrande/deep-research`), but this box's SSH key authenticates as a different
+GitHub account (`alberto-bm`) with no write access, so `git push` fails `Permission denied`. `gh` is
+authenticated as the owner (`albertogrande`, `repo`+`workflow` scopes), so the working path is a
+one-off HTTPS push through gh's credential helper:
+`git -c credential.helper='!gh auth git-credential' push https://github.com/albertogrande/deep-research.git main`,
+then `git fetch origin` to sync the tracking ref. The remote is left untouched; the permanent fix
+(add the owner SSH key, or `gh auth setup-git` for HTTPS) is the user's call.
+
+Cost: **$0** (doc + journal only, offline).
+
 ## Entry 26 — 2026-07-20 — A shareable DX one-pager for the Pydantic team (GitHub Pages)
 
 Not code — a communication artifact. Distilled the 25-entry journal into a single-page **DX &
