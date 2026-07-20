@@ -10,6 +10,46 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 26 — 2026-07-20 — A shareable DX one-pager for the Pydantic team (GitHub Pages)
+
+Not code — a communication artifact. Distilled the 25-entry journal into a single-page **DX &
+product feedback report for the Pydantic team**, rendered as a self-contained `docs/index.html`
+for GitHub Pages (served from `/docs` → `https://albertogrande.github.io/deep-research/`).
+Theme-aware (light/dark toggle over a `prefers-color-scheme` default), mobile-first, IBM Plex via
+Google Fonts with a system fallback stack, one Pydantic-magenta accent; wins read as lead lines,
+every actionable item carries an `ask` tag, subscription-billing tagged `blocker`.
+
+**The framing was the work.** The first cut was a generic "key insights" list; the user reframed
+it to its real audience and purpose — a weekend evaluation of whether the full stack (AI /
+Logfire / Evals / Gateway) could be a *production* setup, shared with Pydantic for product/DX
+feedback. That reframe reorganized everything by product, with a **Top DX asks** priority list as
+the payload.
+
+**New signal this session, not previously in the journal — human onboarding DX.** The only task
+outside Claude Code was the Pydantic web console, and that is where the velocity dropped. Recorded
+from the user: the default project came pre-created (good), but **token creation was hard to find
+and the credential taxonomy confuses (write token vs. read token vs. API key)**, and hand-copying
+values into the Claude Code env was painful on mobile. The load-bearing quote — "in Claude I'm
+going at 100×, on the Pydantic web I slow down." **Time-to-token and a mobile-first console are the
+highest-frequency friction**, above any single API papercut, because every new user hits them.
+
+**Agent-DX reflection, recorded first-person for the report.** Three findings worth keeping:
+(1) **introspectable beats documented** — reading the installed package's signatures/source (e.g.
+`Agent.override`'s `native_tools=`, the `RunUsage` limit coupling) beat any tutorial, because
+training data and blog posts drift monthly; (2) **offline-testability is the superpower** —
+`TestModel`/`FunctionModel` + `ALLOW_MODEL_REQUESTS=False` + key-free evals make dozens of
+verify-my-own-work iterations free; (3) **runtime traps are the enemy** — the `LLMJudge` OpenAI
+default, the shared-`RunUsage` coupling, and the network-capable-model hang all failed at
+*runtime, not construction*, slipping past a green offline suite. Generalizable ask: fail at
+construction, and put the escape hatch in the error message.
+
+Decisions: GitHub Pages over a committed raw `.html` (GitHub serves committed HTML as source, not a
+rendered page); `/docs` source over a `gh-pages` branch (docs/ already held `demo.tape`, so no new
+branch). Google Fonts by CDN rather than inlined data-URIs — acceptable here because Pages imposes
+no CSP and the system fallback is graceful (the inline-only rule is an Artifact-CSP constraint,
+which this is not). README discoverability link and the Pages toggle were deferred to the user.
+Cost: **$0** (doc only, offline).
+
 ## Entry 25 — 2026-07-20 — Retrospective: the SOTA effort, phases 1–12, $0 spent
 
 Final entry of the "make it SOTA-comparable" effort (entries 15–24 are the per-phase logs).

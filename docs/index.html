@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Weekend on the Pydantic Stack — DX &amp; Product Feedback</title>
+<meta name="description" content="Developer-experience &amp; product feedback for the Pydantic team, from building a deep-research agent on the full Pydantic stack (AI, Logfire, Evals, Gateway) — solo, on mobile, over a weekend through Claude Code.">
+<meta property="og:title" content="A Weekend on the Pydantic Stack — DX &amp; Product Feedback">
+<meta property="og:description" content="What worked, what didn't, and the top DX asks — distilled from a weekend building deepresearch on Pydantic AI, Logfire, Evals, and Gateway.">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // Set theme before paint to avoid a flash.
+  (function () {
+    try {
+      var saved = localStorage.getItem('theme');
+      var t = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --bg: #fbfafc; --surface: #ffffff; --surface-2: #f6f3f8;
+    --text: #1a1421; --muted: #6c6472; --border: #ebe7ef;
+    --accent: #cc1f7a; --accent-ink: #a8175f; --accent-soft: #fbe8f1;
+    --on-accent: #ffffff; --good: #0e9e73;
+    --maxw: 62ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121016; --surface: #1a161e; --surface-2: #221b29;
+      --text: #f2eef5; --muted: #a89fb0; --border: #2b2532;
+      --accent: #ff5fb0; --accent-ink: #ff86c4; --accent-soft: #2a1522;
+      --on-accent: #1a1421; --good: #34d3a0;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfafc; --surface: #ffffff; --surface-2: #f6f3f8;
+    --text: #1a1421; --muted: #6c6472; --border: #ebe7ef;
+    --accent: #cc1f7a; --accent-ink: #a8175f; --accent-soft: #fbe8f1;
+    --on-accent: #ffffff; --good: #0e9e73;
+  }
+  :root[data-theme="dark"] {
+    --bg: #121016; --surface: #1a161e; --surface-2: #221b29;
+    --text: #f2eef5; --muted: #a89fb0; --border: #2b2532;
+    --accent: #ff5fb0; --accent-ink: #ff86c4; --accent-soft: #2a1522;
+    --on-accent: #1a1421; --good: #34d3a0;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.62; font-size: 16px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(18px, 4vw, 34px) clamp(18px, 5vw, 30px) 90px; }
+
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid var(--accent-soft); transition: border-color .15s ease; }
+  a:hover { border-bottom-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere;
+  }
+
+  /* Top bar */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: clamp(26px, 6vw, 46px); }
+  .topbar .repo {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.78rem;
+    color: var(--muted); border: none; letter-spacing: 0.01em;
+  }
+  .topbar .repo:hover { color: var(--accent-ink); }
+  .toggle {
+    display: inline-grid; place-items: center; width: 38px; height: 38px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); cursor: pointer; padding: 0;
+  }
+  .toggle:hover { border-color: var(--accent); color: var(--accent-ink); }
+  .toggle svg { width: 18px; height: 18px; }
+  :root[data-theme="dark"] .icon-moon { display: none; }
+  :root[data-theme="dark"] .icon-sun { display: block; }
+  .icon-sun { display: none; } .icon-moon { display: block; }
+
+  /* Hero */
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; text-transform: uppercase;
+    letter-spacing: 0.14em; font-size: 0.72rem; font-weight: 500; color: var(--accent-ink); margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(2rem, 6.5vw, 3rem); line-height: 1.04; font-weight: 600;
+    letter-spacing: -0.022em; margin: 0 0 14px; text-wrap: balance;
+  }
+  .subtitle { font-size: clamp(1.02rem, 2.6vw, 1.18rem); color: var(--muted); margin: 0 0 22px; max-width: var(--maxw); text-wrap: pretty; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.72rem;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+    padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip.hot { color: var(--accent-ink); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+  .lead { font-size: 1.04rem; margin: 0 0 26px; max-width: var(--maxw); }
+  .lead strong, p strong { font-weight: 600; }
+
+  /* Verdict callout */
+  .callout {
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 12px; padding: clamp(16px, 4vw, 22px); margin: 0 0 40px;
+  }
+  .callout .eyebrow { margin-bottom: 8px; }
+  .callout p { margin: 0; max-width: var(--maxw); }
+
+  /* Sections */
+  section { margin: 0 0 34px; }
+  section h2 { font-size: clamp(1.24rem, 3.4vw, 1.55rem); font-weight: 600; letter-spacing: -0.012em; margin: 0 0 12px; line-height: 1.2; }
+  section .eyebrow { margin-bottom: 8px; }
+  section .lead { font-size: 1rem; margin-bottom: 14px; }
+
+  ul.notes { list-style: none; margin: 0; padding: 0; max-width: var(--maxw); }
+  ul.notes li { position: relative; padding-left: 22px; margin-bottom: 11px; }
+  ul.notes li::before {
+    content: ""; position: absolute; left: 3px; top: 0.62em; width: 6px; height: 6px;
+    border-radius: 2px; background: var(--accent);
+  }
+
+  .tag {
+    display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+    color: var(--accent-ink); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    padding: 1px 6px; border-radius: 6px; margin-left: 7px; vertical-align: 1px; white-space: nowrap;
+  }
+  .tag.blocker { color: var(--on-accent); background: var(--accent); border-color: transparent; }
+  .tag.win { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+
+  /* Asks list */
+  .asks { margin: 0; padding: 0; list-style: none; counter-reset: ask; max-width: var(--maxw); }
+  .asks li { position: relative; padding-left: 40px; margin-bottom: 13px; counter-increment: ask; min-height: 26px; }
+  .asks li::before {
+    content: counter(ask); position: absolute; left: 0; top: 0.05em;
+    width: 26px; height: 26px; display: grid; place-items: center;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.8rem; font-weight: 600;
+    color: var(--accent-ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+
+  hr.rule { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 22px; margin-top: 46px; }
+  footer p { margin: 0 0 8px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .wrap { animation: rise .45s ease both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <a class="repo" href="https://github.com/albertogrande/deep-research">albertogrande/deep-research ↗</a>
+    <button class="toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle theme">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
+    </button>
+  </div>
+
+  <header>
+    <p class="eyebrow">Builder's report · July 2026</p>
+    <h1>A Weekend on the Pydantic Stack</h1>
+    <p class="subtitle">DX &amp; product feedback from building a deep-research agent — solo, on mobile, through a Claude Code agent.</p>
+    <div class="chips">
+      <span class="chip">Weekend build</span>
+      <span class="chip">Mobile · Claude Code</span>
+      <span class="chip">Anthropic-only</span>
+      <span class="chip hot">~$0.66 live spend</span>
+      <span class="chip">91 offline tests · $0 CI</span>
+    </div>
+    <p class="lead">A dev spent a weekend building <code>deepresearch</code> — a wave-based, claim-verifying research agent — with one real question: could the full Pydantic stack (AI, Logfire, Evals, Gateway) be a production setup? Constraints were deliberately tight: one Anthropic key, one Logfire account, no other paid services, and a builder journal kept every session to capture the experience.</p>
+  </header>
+
+  <div class="callout">
+    <p class="eyebrow">Verdict</p>
+    <p>The stack cleared the bar. Every prod-critical unknown got a yes — server tools work through the Gateway, costs are real and small (~$0.66 live total; the entire 10-phase hardening effort ran at $0), Logfire needed zero config, and the whole thing is offline-testable. The one true adoption blocker is subscription billing; everything else below is papercuts and onboarding polish.</p>
+  </div>
+
+  <section>
+    <p class="eyebrow">Onboarding · human DX</p>
+    <h2>The friction wasn't the code</h2>
+    <p class="lead">My only task outside Claude Code was signing up on the Pydantic web console — and that's exactly where the weekend slowed down. The default project came pre-created, genuinely helpful; everything after it had drag.</p>
+    <ul class="notes">
+      <li>Finding where to create a token was hard, and the credential taxonomy confuses — write token vs. read token vs. API key, with no signal for which one you actually need.<span class="tag">ask</span></li>
+      <li>Copying values by hand into Claude Code's env was painful on mobile — small targets, cross-app paste, easy to fumble.<span class="tag">ask</span></li>
+      <li>The velocity mismatch is the real story: inside Claude Code I move at 100×, then hit the web console and slow to a crawl. That context-switch is where drop-off risk lives.</li>
+      <li>Fixes: cut time-to-token, label credentials by use case, make the console mobile-first — ideally a smoother token handoff straight into a dev environment.<span class="tag">ask</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Pydantic AI</p>
+    <h2>The core delivered</h2>
+    <p class="lead"><strong>Wins.</strong> Model-less agent singletons + per-run <code>model=</code> kept all routing in config; generics carry output types end-to-end (one correct annotation fixed 45 of 51 type errors at once); output validators + <code>ModelRetry</code> are the right home for semantic rules.</p>
+    <ul class="notes">
+      <li><code>TestModel</code> rejects built-in tools — the <code>native_tools=[]</code> override is THE pattern for offline-testing tool agents, and it's undocumented.<span class="tag">ask</span></li>
+      <li>Shared <code>RunUsage</code> is also the limit surface — reusing one accumulator for accounting silently makes <code>UsageLimits</code> cumulative across sibling runs (a real bug we hit).<span class="tag">ask</span></li>
+      <li>No per-run context to output validators — they see only <code>ctx.deps</code>, forcing a stash-on-mutable-Deps hack; an <code>Agent.run(context=…)</code> kwarg would fix it.<span class="tag">ask</span></li>
+      <li>Can't bill to a Claude Max subscription — shaped the entire project's economics.<span class="tag blocker">blocker</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Logfire</p>
+    <h2>Zero-config, and a testing superpower</h2>
+    <p class="lead"><strong>Wins.</strong> Lit up with zero extra config beyond the token; <code>instrument_pydantic_ai</code> traced every call without HTTP-level noise.</p>
+    <ul class="notes">
+      <li>The find of the effort: <code>HasMatchingSpan</code> + <code>SpanQuery</code> let us assert pipeline shape from the span tree offline, in CI — behavioral evals at $0.<span class="tag win">win</span></li>
+      <li>Gotcha: <code>logfire.configure()</code> must run before <code>dataset.evaluate</code> sets up recording, or you get <code>SpanTreeRecordingError</code>.<span class="tag">ask</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Pydantic Evals</p>
+    <h2>Near-zero friction, one sharp edge</h2>
+    <p class="lead"><strong>Wins.</strong> Custom evaluators are just dataclasses returning dicts; the whole objective suite was about an hour. Returning the task's typed <code>RunRecord</code> instead of scraping output paid off repeatedly.</p>
+    <ul class="notes">
+      <li>The <code>LLMJudge</code> OpenAI default is a runtime trap — with no OpenAI key it crashes every eval run, at runtime, not construction.<span class="tag">ask</span></li>
+      <li>Minor docs drift: <code>Dataset(...)</code> requires <code>name=</code>; <code>result.usage</code> is an attribute, not a method.<span class="tag">ask</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Gateway</p>
+    <h2>The open questions, closed</h2>
+    <p class="lead"><strong>Wins.</strong> Server-side web tools work through the Gateway (the headline unknown), verified end-to-end — it "just worked" with only its own key, no Anthropic-key juggling.</p>
+    <ul class="notes">
+      <li><code>genai-prices</code> (first-party, offline snapshot) priced every model including cache tokens and dated transitions — retired two hand-rolled workarounds.<span class="tag win">win</span></li>
+      <li>Gotchas: a gateway key without an encoded region breaks base-URL inference; there's no <code>max_retries</code> knob on <code>gateway_provider</code> (we post-set <code>provider.client.max_retries</code>).<span class="tag">ask</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Agent DX · Claude's own account</p>
+    <h2>Building it as an agent</h2>
+    <p class="lead">Two properties of the stack made it genuinely good to build on as an agent, and one class of bug made it hard.</p>
+    <ul class="notes">
+      <li><strong>Introspectable beats documented.</strong> My training lags and blog posts drift monthly, so what saved me repeatedly was reading the installed package — <code>Agent.override</code>'s signature to find <code>native_tools=</code>, the installed source to confirm the <code>RunUsage</code> limit coupling. Accurate types and readable source matter more to an agent than any tutorial.</li>
+      <li><strong>Offline-testability is the superpower.</strong> <code>TestModel</code>/<code>FunctionModel</code>, <code>ALLOW_MODEL_REQUESTS=False</code>, and key-free evals let me verify my own work deterministically across dozens of iterations without spending a cent.</li>
+      <li><strong>Runtime traps are what hurt.</strong> The costliest bugs failed at runtime, not construction — the <code>LLMJudge</code> default, the <code>RunUsage</code> coupling, and worst, a real env key silently making un-overridden agents network-capable (a hang I chased for a while).</li>
+      <li><strong>The generalizable ask:</strong> fail at construction, not first request, and put the escape hatch in the error message.<span class="tag">ask</span></li>
+    </ul>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">Priorities</p>
+    <h2>Top DX asks</h2>
+    <ol class="asks">
+      <li>Faster time-to-token, clearer credential types (read vs. write vs. API key), mobile-first console — the biggest human friction.</li>
+      <li>Claude Max / subscription billing — the one true adoption blocker.</li>
+      <li><code>Agent.run(context=…)</code> for per-run data into output validators.</li>
+      <li><code>LLMJudge</code> should default to the configured provider and fail at construction, not runtime.</li>
+      <li>Document <code>TestModel</code> + built-in tools (<code>native_tools=[]</code>) — and put the hint in the error message.</li>
+      <li>Retry config on <code>gateway_provider</code>; document the <code>RunUsage</code> / <code>UsageLimits</code> coupling.</li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>Distilled from the deepresearch <a href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md">Builder Journal</a> — 25 entries across the build, one appended per session (hook-enforced). Built solo through Claude Code; the <em>Agent DX</em> section is Claude's own account of the experience.</p>
+    <p><a href="https://github.com/albertogrande/deep-research">github.com/albertogrande/deep-research</a></p>
+  </footer>
+
+</div>
+
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', function () {
+    var root = document.documentElement;
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+</script>
+</body>
+</html>
