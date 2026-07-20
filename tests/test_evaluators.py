@@ -1,19 +1,24 @@
-"""Offline unit tests for the objective evaluators (no models, mocked network)."""
+"""Offline unit tests for the objective evaluators and judge plumbing (no real models,
+mocked network; judge agents exercised via Agent.override + TestModel)."""
 
 import httpx
 import pytest
+from pydantic_ai.models.test import TestModel
 from pydantic_evals.evaluators import EvaluatorContext
 
 from deepresearch.models import Claim, RunRecord, Verdict
 from evals.common import EvalOutput
 from evals.evaluators import (
     CitationCoverage,
+    CitationDensity,
     CitationIntegrity,
     UnsupportedLeakage,
     URLResolution,
     VerifiedClaimRate,
+    body_sentences,
     report_body_paragraphs,
 )
+from evals.judges import CitationSupport, entailment_judge
 
 REPORT = """\
 # Title
@@ -83,6 +88,45 @@ def test_report_body_paragraphs_excludes_tail_headings_and_tldr():
 def test_citation_coverage_half():
     out = EvalOutput(report_markdown=REPORT, record=_record([]))
     assert CitationCoverage().evaluate(_ctx(out)) == {"citation_coverage": 0.5}
+
+
+def test_citation_density_counts_sentences():
+    # Body: "Cited paragraph with a fact [1]." + "Uncited paragraph without any marker."
+    out = EvalOutput(report_markdown=REPORT, record=_record([]))
+    assert CitationDensity().evaluate(_ctx(out)) == {"citation_density": 0.5}
+    two_sentence = REPORT.replace(
+        "Cited paragraph with a fact [1].", "Cited fact [1]. Trailing uncited sentence here."
+    )
+    out2 = EvalOutput(report_markdown=two_sentence, record=_record([]))
+    assert CitationDensity().evaluate(_ctx(out2)) == {"citation_density": pytest.approx(1 / 3)}
+
+
+def test_body_sentences_splits_paragraphs():
+    assert body_sentences("# T\n\nOne. Two [1]! Three?\n\n## References\n\n1. x") == [
+        "One.",
+        "Two [1]!",
+        "Three?",
+    ]
+
+
+async def test_citation_support_judges_cited_sentences():
+    claims = [
+        _claim("c-001", "Paris is the capital of France.", "https://en.wikipedia.org/wiki/Paris"),
+        _claim("c-002", "Paris has 2.1M inhabitants.", "https://insee.fr/stats"),
+    ]
+    report = (
+        "# T\n\n> **TL;DR** — x.\n\n## S\n\nParis is the capital [1]. It has 2.1M people [2].\n\n"
+        "## References\n\n1. a\n2. b\n"
+    )
+    out = EvalOutput(report_markdown=report, record=_record([], claims))
+    with entailment_judge.override(model=TestModel(custom_output_args={"supported": True})):
+        result = await CitationSupport(model="unused-under-override").evaluate(_ctx(out))
+    assert result == {"citation_accuracy": 1.0}
+
+
+async def test_citation_support_not_applicable_without_citations():
+    out = EvalOutput(report_markdown="# T\n\nNo citations here.", record=_record([], []))
+    assert await CitationSupport(model="x").evaluate(_ctx(out)) == {}
 
 
 def test_citation_integrity_passes_on_sound_report():

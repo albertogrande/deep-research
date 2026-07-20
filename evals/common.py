@@ -34,6 +34,14 @@ def judge_model(settings: Settings) -> str:
     return provider_prefix(settings, server_tool=False) + "claude-sonnet-4-6"
 
 
+def install_default_judge(settings: Settings) -> None:
+    """Belt and braces against the OpenAI-default trap: even if some evaluator forgets an
+    explicit ``model=``, the process-wide default judge is ours."""
+    from pydantic_evals.evaluators.llm_as_a_judge import set_default_judge_model
+
+    set_default_judge_model(judge_model(settings))  # type: ignore[arg-type]
+
+
 def make_task(base_settings: Settings):
     """Build the async eval task closed over settings (verify on/off, routing, depth)."""
 
@@ -45,10 +53,11 @@ def make_task(base_settings: Settings):
     return research_task
 
 
-def eval_settings(*, verify: bool = True, out_subdir: str = "default") -> Settings:
-    """Quick-depth settings for eval runs (cost control: ~8 cases × ≈$0.30)."""
+def eval_settings(*, verify: bool = True, out_subdir: str = "default", profile: str = "quick") -> Settings:
+    """Settings for eval runs. Default quick depth for cost control (~8 cases × ≈$0.30);
+    pass profile='standard' to evaluate the depth real users run (~8 × ≈$0.70)."""
     return Settings(
-        profile="quick",
+        profile=profile,
         verify=verify,
         output_dir=str(EVAL_RUNS_DIR / out_subdir),
     )

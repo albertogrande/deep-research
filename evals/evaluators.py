@@ -52,6 +52,30 @@ class CitationCoverage(Evaluator[str, EvalOutput, Any]):
         return {"citation_coverage": covered / len(paragraphs)}
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def body_sentences(report_markdown: str) -> list[str]:
+    """Sentences of the body paragraphs — the FACT-style unit of citation accounting."""
+    sentences: list[str] = []
+    for paragraph in report_body_paragraphs(report_markdown):
+        sentences += [s.strip() for s in _SENTENCE_SPLIT.split(paragraph) if s.strip()]
+    return sentences
+
+
+@dataclass
+class CitationDensity(Evaluator[str, EvalOutput, Any]):
+    """Fraction of body SENTENCES carrying a [n] citation — finer-grained than the
+    paragraph-level CitationCoverage (both are kept; density is the stricter signal)."""
+
+    def evaluate(self, ctx: EvaluatorContext[str, EvalOutput, Any]) -> dict[str, float]:
+        sentences = body_sentences(ctx.output.report_markdown)
+        if not sentences:
+            return {}
+        cited = sum(1 for s in sentences if _CITATION.search(s))
+        return {"citation_density": cited / len(sentences)}
+
+
 _REF_LINE = re.compile(r"^(\d+)\.\s", re.MULTILINE)
 _CITE_NUM = re.compile(r"\[(\d+)\]")
 

@@ -10,6 +10,45 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 22 — 2026-07-20 — Evals grow teeth: FACT-style citation accuracy, RACE rubric, pairwise, span evals
+
+Phase 8 — measurement. The research phase's key insight: DeepResearch Bench's two axes (RACE
+quality rubric, FACT citation accuracy) fit a report-producing scaffold, and almost no OSS
+project publishes numbers on either — so the eval suite now produces both, plus a pairwise
+harness, plus something better than I expected to get: **behavioral evals that run offline in
+CI**.
+
+- **`CitationSupport`** (evals/judges.py): FACT-style citation accuracy. Sample cited body
+  sentences (deterministic even spread, ≤8/case — no RNG in evals), map each `[n]` back to
+  its claims *through the same code-owned citation map the report was assembled with* (after
+  reproducing the orchestrator's unsupported-claim exclusion — subtle: rebuild from all
+  claims and the numbering silently shifts), and ask a judge whether the sentence is entailed
+  by the claims' verbatim quotes. Top commercial products score 78–90% on this; ours goes in
+  the README when the live phase runs.
+- **RACE-style rubric** (`race_judges`): comprehensiveness / insight / readability LLMJudges
+  alongside the existing completeness/faithfulness/premise set. Also
+  `set_default_judge_model()` at setup — belt-and-braces so even a forgotten `model=` can't
+  fall through to the library's OpenAI default.
+- **`evals/experiments/pairwise.py`**: DeepConsult-style win/tie/loss. Two modes: judge
+  existing run dirs (matched by query from run.json — cheap, judge calls only) or run two
+  live Settings arms first. Every pair judged twice with positions swapped; disagreement
+  counts as a tie — position bias is the classic pairwise failure and the swap is cheap
+  insurance.
+- **`tests/test_behavior_evals.py`** — the stack find of the phase: `HasMatchingSpan` +
+  `SpanQuery` assert the pipeline's *shape* from the OTel span tree with TestModel driving —
+  "plan ran", "verification present", "no wave 2 under quick's max_waves=1" (via span
+  attributes), "no clarify span without --interactive". Zero cost, so unlike the live suite
+  these DO run in CI. Gotcha: `logfire.configure()` must happen *before* `dataset.evaluate`
+  sets up its recording context — configuring inside the task raises SpanTreeRecordingError
+  (and relying on an earlier test having configured it would be order-dependent).
+- `CitationDensity` (sentence-level, stricter sibling of the paragraph-level coverage
+  metric) and an `--depth` flag for `run_evals` so evals can exercise `standard`, the depth
+  real users run.
+
+91 offline tests green. All new LIVE surfaces are wired but unexecuted (user decision:
+$0 this effort — costs documented: evals ~$2.50 quick / ~$5 standard; pairwise ~$0.15 on
+existing dirs). Cost: **$0**.
+
 ## Entry 21 — 2026-07-20 — Two new surfaces: report.html and an MCP server of ourselves
 
 Phase 7 — distribution. Two ways for the work to leave the terminal:
