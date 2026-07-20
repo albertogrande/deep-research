@@ -1,18 +1,16 @@
-<div align="center">
-
 # 🔍 deepresearch
 
 **A deep research agent that cites its sources — and checks them.**
 
 Ask a question; get back a cited Markdown report whose every claim has been re-fetched from its source and verified. Built end-to-end on the [Pydantic stack](https://pydantic.dev): [Pydantic AI](https://pydantic.dev/docs/ai/) · [Logfire](https://pydantic.dev/docs/logfire/) · [Pydantic Evals](https://pydantic.dev/docs/ai/evals/) · [Pydantic AI Gateway](https://pydantic.dev/docs/ai/gateway/). Anthropic models only, no other services.
 
-![CI](https://github.com/albertogrande/deep-research/actions/workflows/ci.yml/badge.svg) ![Python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Built on](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0) ![Tests](https://img.shields.io/badge/tests-91%20offline-brightgreen) ![Typed](https://img.shields.io/badge/pyright-clean-brightgreen)
+[![CI](https://github.com/albertogrande/deep-research/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/albertogrande/deep-research/actions/workflows/ci.yml) [![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml) [![License: MIT](https://img.shields.io/github/license/albertogrande/deep-research)](LICENSE) [![Built on Pydantic AI](https://img.shields.io/badge/built%20on-Pydantic%20AI-e520a0)](https://pydantic.dev/docs/ai/)
 
-</div>
+<!-- TODO(author): add a CLI demo GIF here -->
 
 ---
 
-Most open-source "deep research" tools stop at *retrieve and summarize*. **deepresearch adds the step they skip: adversarial verification** — it re-fetches every cited page and judges each claim against what the page actually says. Contradicted claims are dropped; unverifiable ones (paywalls, 403s) are kept but flagged. The [eval suite](#evals) exists to prove whether that step earns its cost.
+Most open-source "deep research" tools stop at *retrieve and summarize*; **deepresearch adds the step they skip: adversarial verification** — it re-fetches every cited page and judges each claim against what the page actually says. Contradicted claims are dropped, unverifiable ones (paywalls, 403s) are kept but flagged, and the [eval suite](#evals) exists to prove that step earns its cost.
 
 ```
    Clarifier (-i) ── 0-3 plan-changing questions ──► editable plan gate (pre-spend)
@@ -36,16 +34,16 @@ Most open-source "deep research" tools stop at *retrieve and summarize*. **deepr
 
 ## Highlights
 
-- **🔬 Claim-level verification** — the differentiator. Each claim is re-checked against its source; verdicts (`supported` / `partial` / `unsupported` / `unverifiable`) drive what reaches the report.
-- **🌊 Iterative with a compressed workspace** — a gap analyst reviews each wave through an evolving, code-built digest (per-branch researcher summaries, `NEW THIS WAVE` deltas, semantic dedup, cross-source corroboration, per-domain caps) and asks targeted follow-ups until marginal value runs out — the IterResearch-style technique with the best measured effect in the field.
-- **🧑‍⚖️ Human-in-the-loop when you want it** — `--interactive` asks 0–3 clarifying questions *only when the answer would change the plan*, then lets you add/drop/edit sub-questions before a single researcher spends money.
-- **⏯️ Interruptible** — every stage checkpoints; `--resume runs/<id>` continues where a run stopped, with prior spend still counted against the original cap.
-- **⚖️ Critic gate** — the planner sets acceptance criteria; after synthesis a critic grades the draft against them and drives bounded, guidance-based revise passes (`--max-revise`, `0` = cheapest). The outline and citation numbering stay fixed across revisions.
-- **🧾 Typed end to end** — every hop is a Pydantic model with validators; the model writes prose, **code owns the citation numbers** (they can't drift). `py.typed`, pyright-clean.
-- **💸 Deterministic cost control** — structural caps → per-call `UsageLimits` → priced checkpoints → a *predictive* wave-affordability gate (a wave the remaining budget can't cover never launches), with the Gateway spend cap as backstop. Prompt caching and adaptive thinking are tuned per role in one config table. A failed run still writes its artifacts.
-- **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree; each `run.json` carries its Logfire trace id. Cache hit rates show up in the run summary.
-- **📊 Measured** — Pydantic Evals suite with objective metrics, FACT-style **citation accuracy** and RACE-style quality judges, a **verifier on/off A/B**, a position-swapped pairwise harness — plus behavioral span evals that run offline in CI.
-- **🔌 Not just a CLI** — importable library (`from deepresearch import run_research`) and an MCP server of itself (`deepresearch-mcp`) for Claude Desktop/Code.
+- **🔬 Claim-level verification** — each claim is re-checked against its source, and its verdict (`supported` / `partial` / `unsupported` / `unverifiable`) drives what reaches the report.
+- **🌊 Iterative with a compressed workspace** — a gap analyst reviews each wave through a code-built digest (per-branch summaries, `NEW THIS WAVE` deltas, semantic dedup, per-domain caps) and asks follow-ups until marginal value runs out.
+- **🧑‍⚖️ Human-in-the-loop when you want it** — `--interactive` asks 0–3 clarifying questions only when the answer would change the plan, then lets you edit sub-questions before any money is spent.
+- **⏯️ Interruptible** — every stage checkpoints, and `--resume runs/<id>` continues where a run stopped with prior spend still counted against the original cap.
+- **⚖️ Critic gate** — the planner sets acceptance criteria and a post-synthesis critic drives bounded revise passes (`--max-revise`, `0` = cheapest) while the outline and citation numbering stay fixed.
+- **🧾 Typed end to end** — every hop is a Pydantic model with validators, and **code owns the citation numbers** so they can't drift (`py.typed`, pyright-clean).
+- **💸 Deterministic cost control** — structural caps, per-call `UsageLimits`, priced checkpoints, and a predictive wave-affordability gate keep spend bounded, with the Gateway spend cap as backstop.
+- **🔭 Observable** — one `logfire.instrument_pydantic_ai()` turns a whole run into a single trace tree, and each `run.json` carries its Logfire trace id.
+- **📊 Measured** — a Pydantic Evals suite pairs objective metrics with FACT-style **citation accuracy**, RACE-style judges, a **verifier on/off A/B**, and behavioral span evals that run offline in CI.
+- **🔌 Not just a CLI** — an importable library (`from deepresearch import run_research`) and an MCP server of itself (`deepresearch-mcp`) for Claude Desktop/Code.
 
 ## Quickstart
 
@@ -106,8 +104,7 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 
 **Interrupted?** Every run checkpoints after each stage — `deepresearch --resume runs/<id>` continues where it stopped, with the money already spent still counted against the original cap.
 
-<details>
-<summary>All flags</summary>
+#### All flags
 
 | Flag | Effect |
 |---|---|
@@ -125,8 +122,6 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 | `-q, --quiet` | no progress output |
 
 Per-role model overrides are env vars, e.g. `DEEPRESEARCH_MODELS__SYNTHESIZER=claude-opus-4-8`.
-
-</details>
 
 ### Use from Claude (MCP)
 
@@ -173,12 +168,13 @@ uv run python -m evals.experiments.verifier_ab      # the flagship: verifier on 
 uv run python -m evals.experiments.pairwise A B     # win/tie/loss between two run dirs
 ```
 
-Eight question categories (factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, false-premise). Objective evaluators — citation coverage + sentence-level density, citation integrity, URL resolution, verified-claim rate, unverifiable rate, unsupported-leakage, duration — plus LLM judges: completeness, faithfulness, premise-handling, a RACE-style rubric (comprehensiveness/insight/readability), and FACT-style **citation accuracy** (sampled cited sentences judged for entailment against the claims' verbatim quotes — the metric where even top products only reach 78–90%). With `LOGFIRE_TOKEN` set, every run lands as a named experiment in Logfire.
+Eight question categories cover factual, multi-hop, time-sensitive, numeric, contested, niche-technical, survey, and false-premise. Objective evaluators — citation coverage + sentence-level density, citation integrity, URL resolution, verified-claim rate, unverifiable rate, unsupported-leakage, duration — run alongside LLM judges for completeness, faithfulness, premise-handling, and a RACE-style rubric (comprehensiveness/insight/readability).
+
+FACT-style **citation accuracy** samples cited sentences and judges entailment against the claims' verbatim quotes — the metric where even top products only reach 78–90%. With `LOGFIRE_TOKEN` set, every run lands as a named experiment in Logfire.
 
 <!-- A/B RESULTS: paste the verifier_ab table here after the first live run -->
 
-<details>
-<summary>Live validation checklist (~$9–12 total; run when ready to spend)</summary>
+#### Live validation checklist (~$9–12 total; run when ready to spend)
 
 Everything in this repo was built and tested offline ($0). To validate live behavior and fill
 the results placeholder above, run in order — stop at any budget line:
@@ -188,8 +184,6 @@ the results placeholder above, run in order — stop at any budget line:
 3. `uv run python -m evals.run_evals` — full suite incl. citation accuracy (~$3).
 4. `uv run python -m evals.experiments.verifier_ab` — the A/B (~$5).
 5. Paste the A/B table over the placeholder above; add the citation-accuracy number and cache-hit rate to Highlights. Optionally render the demo GIF: `vhs docs/demo.tape` (one more quick run).
-
-</details>
 
 ## Development
 
@@ -205,16 +199,13 @@ and human-readable; [llms.txt](llms.txt) has the source map). The honest build l
 learning, dead end, and stack dev-ex note, from the origin story onward — is
 **[JOURNAL.md](JOURNAL.md)**. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-<details>
-<summary>Known limitations</summary>
+#### Known limitations
 
 Sequential section writing (deliberate — parallel section-writing measurably produces
 disjoint reports) · stage-level, not token-level, streaming · per-role model overrides are
 env-only · similarity dedup is string-based, not embedding-based (deliberate: Anthropic-only
 means no embedding endpoint, and it's free and deterministic) · live eval numbers not yet
 published (the checklist above fills them in). See JOURNAL.md for the reasoning behind each.
-
-</details>
 
 ## License
 
