@@ -1,0 +1,28 @@
+# Tag vX.Y.Z -> build -> publish to PyPI via trusted publishing (OIDC, no tokens).
+# One-time setup on pypi.org: add this repo/workflow as a trusted publisher with
+# environment "pypi" (see .claude/skills/release/SKILL.md).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sanity — offline suite must be green before anything ships
+        run: uv sync --frozen && uv run pytest -q
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1

@@ -10,6 +10,38 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 24 — 2026-07-20 — Packaging grows up: pyright clean, CI matrix, trusted publishing
+
+Phase 11 — the boring-but-load-bearing layer.
+
+**Pyright, basic mode, 51 → 0 errors.** The instructive part: ~45 of the 51 errors cascaded
+from ONE annotation — `_run_agent(agent: Agent, ...)` untyped, which pyright resolved to
+`Agent[object, str]`, so every `.output` in the orchestrator typed as `str`. Making it
+generic (`Agent[Deps, OutputT] -> AgentRunResult[OutputT]`) fixed the whole cascade at once —
+pydantic-ai's generics genuinely carry output types end-to-end when you let them. The
+stragglers were honest lessons too: pyright can't see that `checkpoint is not None` implies
+`resume_from is not None` across a ternary (restructured the resume entry to narrow
+properly); `Settings(**{...})` unpacks defeat kwarg checking (build explicitly or type the
+dict `dict[str, Any]`); and the `stage` string became a shared `CheckpointStage` literal,
+deleting a type-ignore.
+
+**Library surface**: `from deepresearch import run_research, Settings, RunRecord` now works —
+with PEP 562 lazy exports so `deepresearch --help` doesn't import the whole pipeline (the
+CLI's deferred-import trick would otherwise have been silently defeated by the package
+`__init__`). `__version__` reads from package metadata: one version, in pyproject only.
+`py.typed` ships; `agents/__init__.py` exports the seven agent objects.
+
+**CI**: matrix 3.11/3.12/3.13, ruff check + format, pyright, pytest with coverage
+(`fail_under=80`; currently 88%). Still offline-only — the hermetic-credentials fixture from
+entry 20 is what makes a coverage gate safe to enforce in CI at all. **Release**: `v*` tag →
+`uv build` → `pypa/gh-action-pypi-publish` with trusted publishing (OIDC, `environment:
+pypi`, zero tokens in the repo); the workflow re-runs the offline suite before building.
+PyPI-side publisher registration is the one manual step, documented in the release skill.
+Plus `.pre-commit-config.yaml` (ruff check+format) and a keep-a-changelog `CHANGELOG.md`
+(0.1.0 = pre-effort state; everything since lives under Unreleased for the first real cut).
+
+91 offline tests green across the pipeline; pyright 0 errors. Cost: **$0**.
+
 ## Entry 23 — 2026-07-20 — The repo becomes AI-dev-native: AGENTS.md, .claude/, and a hook instead of a hope
 
 Phase 10 — making the repo itself agent-legible, following the conventions the pydantic-ai

@@ -14,9 +14,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
 
 import logfire
 from pydantic_ai import Agent, UsageLimits
+from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.exceptions import (
     ModelAPIError,
     ModelHTTPError,
@@ -61,6 +63,7 @@ from .digest import (
 from .interaction import InteractionHooks
 from .models import (
     Checkpoint,
+    CheckpointStage,
     Claim,
     FailedSubQuestion,
     Findings,
@@ -112,6 +115,8 @@ WAVE_AFFORDABILITY_FACTOR = 0.8
 
 TRANSIENT_RETRY_DELAY_S = 2.0  # module-level so tests can monkeypatch it away
 
+OutputT = TypeVar("OutputT")
+
 
 class ErrorClass(enum.Enum):
     TRANSIENT = "transient"  # 429/5xx/network: worth one retry
@@ -162,7 +167,7 @@ class _RunState:
 
 
 async def _run_agent(
-    agent: Agent,
+    agent: Agent[Deps, OutputT],
     prompt: str,
     *,
     role: Role,
@@ -170,7 +175,7 @@ async def _run_agent(
     usage_limits: UsageLimits,
     reasoning: bool | None = None,
     **kwargs,
-):
+) -> AgentRunResult[OutputT]:
     """Run an agent with a FRESH per-run RunUsage (so usage_limits apply to this run alone),
     merging the result into the role's cumulative ledger afterwards — even on failure.
     Model choice, transport retries, caching, and thinking all come from config."""
@@ -227,7 +232,7 @@ def _flush_record(record: RunRecord, state: _RunState, deps: Deps, timings: dict
 
 
 def _write_stage_checkpoint(
-    stage: str,
+    stage: CheckpointStage,
     deps: Deps,
     record: RunRecord,
     state: _RunState,
@@ -238,7 +243,7 @@ def _write_stage_checkpoint(
     _flush_record(record, state, deps, timings)
     write_checkpoint(
         Checkpoint(
-            stage=stage,  # type: ignore[arg-type]
+            stage=stage,
             record=record,
             queue=queue,
             seen_questions=sorted(state.seen_questions),
@@ -260,12 +265,13 @@ async def run_research(
     emit = on_event or (lambda _e: None)
     setup_telemetry()
 
-    checkpoint = load_checkpoint(Path(resume_from)) if resume_from is not None else None
-    if checkpoint is not None:
+    checkpoint = None
+    if resume_from is not None:
+        run_dir = Path(resume_from)
+        checkpoint = load_checkpoint(run_dir)
         record = checkpoint.record
         query = record.clarified_query or record.query
         run_id = record.run_id
-        run_dir = Path(resume_from)
     else:
         run_id = new_run_id(query)
         run_dir = create_run_dir(settings.output_dir, run_id)

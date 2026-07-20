@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 Confidence = Literal["high", "medium", "low"]
 VerdictKind = Literal["supported", "partial", "unsupported", "unverifiable"]
 CoverageStatus = Literal["covered", "partial", "uncovered"]
+CheckpointStage = Literal["planned", "wave_done", "verified"]
 
 
 # --- planning ---------------------------------------------------------------
@@ -206,7 +207,7 @@ class Checkpoint(BaseModel):
     stored alongside. A finished run has no checkpoint (deleted on successful report write).
     """
 
-    stage: Literal["planned", "wave_done", "verified"]
+    stage: CheckpointStage
     record: RunRecord
     queue: list[SubQuestion] = Field(
         default_factory=list,

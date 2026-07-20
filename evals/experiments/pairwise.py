@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
@@ -63,8 +64,8 @@ def load_arm_from_dir(arm_dir: Path) -> dict[str, str]:
     return reports
 
 
-def parse_arm_spec(spec: str) -> dict[str, object]:
-    overrides: dict[str, object] = {}
+def parse_arm_spec(spec: str) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
     for part in filter(None, (p.strip() for p in spec.split(","))):
         key, _, value = part.partition("=")
         overrides["profile" if key == "depth" else key] = value

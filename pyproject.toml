@@ -9,6 +9,18 @@ authors = [
 ]
 requires-python = ">=3.11"
 keywords = ["deep-research", "agents", "pydantic-ai", "logfire", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "genai-prices>=0.0.35",
     "markdown-it-py>=3.0.0",
@@ -21,6 +33,12 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/albertogrande/deep-research"
+Repository = "https://github.com/albertogrande/deep-research"
+Changelog = "https://github.com/albertogrande/deep-research/blob/main/CHANGELOG.md"
+Issues = "https://github.com/albertogrande/deep-research/issues"
 
 [project.scripts]
 deepresearch = "deepresearch.cli:app"
@@ -35,8 +53,11 @@ dev = [
     "dirty-equals>=0.11",
     "httpx>=0.28.1",
     "mcp>=1.2",
+    "pre-commit>=4.0",
+    "pyright>=1.1.390",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0",
     "ruff>=0.15.22",
 ]
 
@@ -53,3 +74,17 @@ target-version = "py311"
 
 [tool.ruff.lint]
 extend-select = ["I", "UP", "B", "C4"]
+
+[tool.pyright]
+include = ["src", "evals"]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+
+[tool.coverage.run]
+source = ["src/deepresearch"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "pragma: no cover"]

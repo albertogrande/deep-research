@@ -37,8 +37,7 @@ async def deep_research(question: str, depth: str = "standard", max_cost: float 
     """
     if depth not in PROFILES:
         return f"error: unknown depth {depth!r}; expected one of {sorted(PROFILES)}"
-    overrides = {"max_cost": max_cost} if max_cost is not None else {}
-    settings = Settings(profile=depth, **overrides)
+    settings = Settings(profile=depth) if max_cost is None else Settings(profile=depth, max_cost=max_cost)
 
     result = await run_research(question, settings)
     record = result.record
