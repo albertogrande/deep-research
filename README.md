@@ -111,6 +111,7 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 | `--no-verify` | skip claim verification |
 | `--max-revise` | critic-driven revise passes (default 2; `0` disables the critic loop — cheapest) |
 | `--resume` | continue an interrupted run from its `runs/<id>` directory (omit QUESTION) |
+| `-i, --interactive` | clarifying questions + editable plan gate before any money is spent |
 | `--json` | print `run.json` to stdout (scriptable) |
 | `--plain` | line-based progress, no live UI |
 | `-q, --quiet` | no progress output |

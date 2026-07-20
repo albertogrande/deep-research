@@ -41,6 +41,15 @@ class SubQuestion(BaseModel):
     wave: int
 
 
+class ClarifyingQuestions(BaseModel):
+    """Clarifier output: questions whose answers would change the research plan."""
+
+    questions: list[str] = Field(
+        default_factory=list,
+        description="0-3 clarifying questions; empty when the query is unambiguous.",
+    )
+
+
 # --- research ---------------------------------------------------------------
 
 
@@ -164,6 +173,7 @@ class RunRecord(BaseModel):
 
     run_id: str
     query: str
+    clarified_query: str | None = None  # query + user clarifications, when --interactive asked any
     profile: str
     routing: str
     logfire_trace_id: str | None = None  # hex trace id → jump to this run's trace in Logfire

@@ -25,6 +25,7 @@ from pydantic_ai.exceptions import (
 )
 from pydantic_ai.usage import RunUsage
 
+from .agents.clarifier import clarifier_agent
 from .agents.critic import critic_agent
 from .agents.gap_analyst import MAX_FOLLOW_UPS, gap_analyst_agent
 from .agents.planner import planner_agent
@@ -47,6 +48,7 @@ from .deps import Budget, BudgetExceeded, Deps, UsageLedger
 from .digest import (
     assign_sub_question_ids,
     build_citation_map,
+    clarified_query,
     critic_prompt,
     dedup_questions,
     enrich_and_dedup_claims,
@@ -56,6 +58,7 @@ from .digest import (
     outline_digest,
     section_prompt,
 )
+from .interaction import InteractionHooks
 from .models import (
     Checkpoint,
     Claim,
@@ -252,6 +255,7 @@ async def run_research(
     settings: Settings,
     on_event: Callable[[ProgressEvent], None] | None = None,
     resume_from: Path | None = None,
+    interaction: InteractionHooks | None = None,
 ) -> RunResult:
     emit = on_event or (lambda _e: None)
     setup_telemetry()
@@ -259,7 +263,7 @@ async def run_research(
     checkpoint = load_checkpoint(Path(resume_from)) if resume_from is not None else None
     if checkpoint is not None:
         record = checkpoint.record
-        query = record.query
+        query = record.clarified_query or record.query
         run_id = record.run_id
         run_dir = Path(resume_from)
     else:
@@ -304,7 +308,14 @@ async def run_research(
             record.logfire_trace_id = current_trace_id()
             try:
                 if checkpoint is None:
+                    if interaction is not None:
+                        query = await _clarify_stage(query, interaction, deps, record, timings)
                     plan = await _plan_stage(query, deps, record, timings, emit)
+                    if interaction is not None:
+                        # The gate sits exactly at the spend boundary: nothing has fanned out
+                        # yet, and the (possibly edited) plan is what the record keeps.
+                        plan = await interaction.review_plan(plan)
+                        record.plan = plan
                     state.sub_questions = assign_sub_question_ids(
                         dedup_questions(plan.sub_questions, state.seen_questions), wave=1
                     )
@@ -343,6 +354,34 @@ async def run_research(
         write_run_record(record, run_dir)
 
     return RunResult(record=record, run_dir=run_dir, report_path=report_path)
+
+
+async def _clarify_stage(
+    query: str, interaction: InteractionHooks, deps: Deps, record: RunRecord, timings
+) -> str:
+    """Ask the clarifier (billed to the planner role — it is part of planning) and fold the
+    user's answers into the query. Degradable: on failure the original query proceeds."""
+    t0 = time.perf_counter()
+    try:
+        with logfire.span("clarify"):
+            run = await _run_agent(
+                clarifier_agent, query, role="planner", deps=deps, usage_limits=PLANNER_LIMITS
+            )
+    except Exception as e:
+        if classify_error(e) is ErrorClass.BUDGET_FATAL:
+            raise BudgetFatalError(str(e)) from e
+        return query
+    finally:
+        timings["clarify"] = time.perf_counter() - t0
+
+    questions = run.output.questions
+    if not questions:
+        return query
+    answers = await interaction.clarify(questions)
+    new_query = clarified_query(query, list(zip(questions, answers, strict=False)))
+    if new_query != query:
+        record.clarified_query = new_query
+    return new_query
 
 
 async def _plan_stage(query, deps: Deps, record: RunRecord, timings, emit):

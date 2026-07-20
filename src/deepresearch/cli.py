@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .config import PROFILES, Settings
-from .models import RunRecord
+from .models import PlannedSubQuestion, ResearchPlan, RunRecord
 from .progress import (
     CostUpdate,
     CritiqueResult,
@@ -84,6 +84,52 @@ def _plain_printer() -> Callable[[ProgressEvent], None]:
     return emit
 
 
+class ConsoleInteraction:
+    """Console prompts behind the InteractionHooks protocol. Blocking is fine here: both
+    gates run before any researcher fan-out, so nothing concurrent is stalled. Ctrl-C at
+    either prompt aborts pre-spend (exit 130)."""
+
+    async def clarify(self, questions: list[str]) -> list[str]:
+        err_console.print("\n[bold]Before researching, a few clarifications[/bold] (Enter to skip):")
+        return [typer.prompt(f"  {q}", default="", show_default=False) for q in questions]
+
+    async def review_plan(self, plan: ResearchPlan) -> ResearchPlan:
+        while True:
+            err_console.print("\n[bold]Research plan[/bold] — edit before any money is spent:")
+            for i, sq in enumerate(plan.sub_questions, 1):
+                err_console.print(f"  {i}. {sq.question}")
+            cmd = typer.prompt(
+                "a <text> add · d <n> drop · e <n> <text> edit · g go", default="g", show_default=False
+            ).strip()
+            if cmd in ("", "g"):
+                return plan
+            op, _, rest = cmd.partition(" ")
+            questions = list(plan.sub_questions)
+            try:
+                if op == "a" and rest.strip():
+                    questions.append(PlannedSubQuestion(question=rest.strip(), rationale="added by user"))
+                elif op == "d":
+                    if len(questions) <= 1:
+                        err_console.print("[red]keep at least one sub-question[/red]")
+                        continue
+                    questions.pop(int(rest) - 1)
+                elif op == "e":
+                    n, _, text = rest.partition(" ")
+                    idx = int(n) - 1
+                    if not text.strip():
+                        raise ValueError
+                    questions[idx] = PlannedSubQuestion(
+                        question=text.strip(), rationale=questions[idx].rationale
+                    )
+                else:
+                    err_console.print("[red]unknown command[/red]")
+                    continue
+            except (ValueError, IndexError):
+                err_console.print("[red]bad command[/red]")
+                continue
+            plan = ResearchPlan(sub_questions=questions, done_criteria=plan.done_criteria)
+
+
 def _print_summary(record: RunRecord, report_path: str | None) -> None:
     verdict_counts: dict[str, int] = {}
     for v in record.verdicts:
@@ -139,6 +185,12 @@ def research(
     output: Annotated[str | None, typer.Option("--output", "-o", help="Output directory.")] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="USD cap for this run.")] = None,
     routing: Annotated[str | None, typer.Option("--routing", help="gateway | direct | split.")] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive", "-i", help="Ask clarifying questions and let you edit the plan pre-spend."
+        ),
+    ] = False,
     no_verify: Annotated[bool, typer.Option("--no-verify", help="Skip claim verification.")] = False,
     max_revise: Annotated[
         int | None,
@@ -163,9 +215,11 @@ def research(
     settings = _build_settings(depth, output, max_cost, routing, False if no_verify else None, max_revise)
     resume_from = Path(resume) if resume else None
     headline = question or f"resume: {resume}"
+    interaction = ConsoleInteraction() if interactive else None
 
     silent = quiet or json_output
-    use_live = not silent and not plain and err_console.is_terminal
+    # Interactive prompts and a Live redraw loop cannot share the terminal.
+    use_live = not silent and not plain and not interactive and err_console.is_terminal
 
     async def _run():
         if use_live:
@@ -174,7 +228,9 @@ def research(
                     question or "", settings, on_event=live.emit, resume_from=resume_from
                 )
         on_event = None if silent else _plain_printer()
-        return await run_research(question or "", settings, on_event=on_event, resume_from=resume_from)
+        return await run_research(
+            question or "", settings, on_event=on_event, resume_from=resume_from, interaction=interaction
+        )
 
     try:
         result = asyncio.run(_run())

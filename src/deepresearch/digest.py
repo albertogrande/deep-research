@@ -66,6 +66,17 @@ def similarity(a: str, b: str) -> float:
     return max(ratio, jaccard)
 
 
+def clarified_query(query: str, qa_pairs: list[tuple[str, str]]) -> str:
+    """Fold clarification answers into the query text the planner sees. Unanswered questions
+    are dropped; with no answers the original query passes through untouched."""
+    answered = [(q, a.strip()) for q, a in qa_pairs if a.strip()]
+    if not answered:
+        return query
+    lines = [query, "", "Clarifications from the user:"]
+    lines += [f"- Q: {q}\n  A: {a}" for q, a in answered]
+    return "\n".join(lines)
+
+
 def assign_sub_question_ids(
     planned: list[PlannedSubQuestion], *, wave: int, start_index: int = 1
 ) -> list[SubQuestion]:

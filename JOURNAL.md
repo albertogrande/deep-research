@@ -10,6 +10,47 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 20 — 2026-07-20 — HITL (--interactive) + a hermetic-test lesson the hard way
+
+Phase 6 — clarify-first and an editable plan gate, the two HITL patterns every commercial
+product converged on (and DeerFlow's headline feature). `deepresearch -i "question"`:
+a clarifier agent asks 0–3 questions *only when the answer would change the plan* (prompt
+explicitly prefers zero — no filler questions), answers fold into the planner's query
+(`clarified_query`, pure, in digest.py), and after planning the user can add/drop/edit
+sub-questions before a single researcher launches. The gate sits exactly at the spend
+boundary. Non-interactive runs are byte-identical to before.
+
+Architecture notes:
+- **`InteractionHooks` is a Protocol** (`interaction.py`), mirroring how progress events keep
+  the orchestrator UI-agnostic. The CLI's `ConsoleInteraction` is one implementation; a
+  server could pass anything else. Deliberately NOT pydantic-ai's `DeferredToolRequests` —
+  that API is for in-run tool approval; this gate is orchestrator-level control flow, and
+  using deferral would have pushed policy into agents.
+- **No new Role.** The clarifier runs on the planner's model and bills the planner ledger —
+  profiles, RunRecord schema, and eval tooling all stay untouched. Its questions ride the
+  same `_run_agent` path, so budget/usage accounting just works.
+- **`RunRecord.clarified_query`** persists the folded query so a resumed run keeps its
+  clarifications (resume reads `clarified_query or query`).
+- User plan edits bypass the planner's output validator on purpose: profile bounds constrain
+  the *model*, not the human. Edited questions flow through the normal
+  `dedup_questions` → `assign_sub_question_ids` path.
+
+**The real story of this session: a test hang that looked like everything and was nothing I
+guessed.** After wiring HITL, `pytest` hung — not just the new tests, *any* test that runs
+the pipeline. Faulthandler stack dumps showed the event loop idle in `select()`. Root cause:
+this dev environment exports a real `PYDANTIC_AI_GATEWAY_API_KEY` (journal 13!), so since the
+Phase-3 `model_for_run` change, any agent a test *forgot to override* built a real
+network-capable model and made a real gateway call. It "worked" for three phases only because
+the sandbox proxy refused those connections fast (→ instant degradable error, tests green);
+today the proxy started stalling instead, and my 600-second read timeout did the rest.
+Two lessons worth the pain: (1) **an offline suite that merely happens to fail fast on
+network calls is not offline** — tests now strip all provider credentials via an autouse
+fixture (skipped under RUN_LIVE_TESTS=1) so un-overridden agents fail fast deterministically;
+(2) faulthandler's `dump_traceback_later(file=...)` must write to an explicit file — its
+default stderr write dies silently with `_exit` under pytest's capture. 81 offline tests
+green in 2.6s. Cost: **$0** (the accidental gateway connections never completed — verified
+no charges possible: the calls hung in connect/read, and Logfire shows no spans).
+
 ## Entry 19 — 2026-07-20 — Resume: every run is now interruptible
 
 Phase 5 — durable execution, the capability every commercial deep-research product ships

@@ -2,10 +2,37 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from deepresearch.config import Settings
+from deepresearch.config import Settings, _retrying_model
+
+
+@pytest.fixture(autouse=True)
+def _offline_no_credentials(monkeypatch):
+    """Hermetic offline suite: strip provider credentials so `model_for_run` always falls
+    back to a model string and an un-overridden agent fails fast instead of making a real
+    API call. Dev environments legitimately export real keys (journal 13) — without this,
+    any agent a test forgot to override would silently hit the network. Live tests
+    (RUN_LIVE_TESTS=1) keep their credentials."""
+    if os.environ.get("RUN_LIVE_TESTS") == "1":
+        yield
+        return
+    for var in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "PYDANTIC_AI_GATEWAY_API_KEY",
+        "PYDANTIC_AI_GATEWAY_BASE_URL",
+        "PAIG_API_KEY",
+        "PAIG_BASE_URL",
+        "LOGFIRE_TOKEN",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    _retrying_model.cache_clear()  # a model cached while keys existed would still be live
+    yield
+    _retrying_model.cache_clear()
 
 
 @pytest.fixture
