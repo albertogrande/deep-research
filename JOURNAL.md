@@ -10,6 +10,40 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 23 — 2026-07-20 — The repo becomes AI-dev-native: AGENTS.md, .claude/, and a hook instead of a hope
+
+Phase 10 — making the repo itself agent-legible, following the conventions the pydantic-ai
+repo exemplifies.
+
+- **AGENTS.md is now the single source of truth**; CLAUDE.md shrank to a 6-line pointer that
+  restates only the journal mandate (so it survives even a shallow read). Full move, not
+  duplication — drift between two rule files is worse than one indirection. The architecture
+  rules got updated to cover everything this effort added (interaction Protocol, checkpoint
+  writes, config's expanded remit, judges-live-in-evals).
+- **Hooks over rules**: the journal mandate stopped being prompt-hoped and became
+  deterministic — `.claude/hooks/check-journal-before-push.sh` (PreToolUse on Bash) blocks
+  any `git push` whose outgoing commits don't touch JOURNAL.md, exit 2 with an explanation
+  pointing at the journal-entry skill. Tested with synthetic stdin payloads both ways.
+  Deliberate subtlety: it checks *committed* changes (`@{upstream}..HEAD`, `HEAD~1..HEAD`
+  fallback for first pushes) — an uncommitted journal edit doesn't count, which is exactly
+  right. shellcheck unavailable in this environment; the script is plain defensive bash.
+- **Four skills** (`.claude/skills/`): `journal-entry` (format + checklist), `run-evals`
+  (the cost table with explicit sign-off gating — "facts in AGENTS.md, procedures in
+  skills"), `release` (the full trusted-publishing flow, written ahead of Phase 11's
+  workflow so the procedure and its automation land together), `add-agent-role` (the
+   8-step multi-file dance, opening with "first ask whether you need a new Role at all" —
+  the clarifier precedent).
+- **`.claude/settings.json`**: allow-list for the harmless loops (pytest/ruff/uv sync/git
+  read-only), deny `Read(./.env)`, and the hook wiring — committed, so every future agent
+  session starts with the same guardrails.
+- **llms.txt** at the root (summary + source map) and **claude.yml** (claude-code-action on
+  @claude mentions) — the workflow is committed inert: it needs a maintainer to add the
+  `ANTHROPIC_API_KEY` repo secret, documented in its header comment.
+
+Meta-note: the hook will govern *this very session's* future pushes too, since Claude Code
+loads `.claude/settings.json` from the repo — the enforcement applies to its author. 91
+offline tests green (repo files only, no code change). Cost: **$0**.
+
 ## Entry 22 — 2026-07-20 — Evals grow teeth: FACT-style citation accuracy, RACE rubric, pairwise, span evals
 
 Phase 8 — measurement. The research phase's key insight: DeepResearch Bench's two axes (RACE

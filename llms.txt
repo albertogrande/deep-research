@@ -1,0 +1,31 @@
+# deepresearch
+
+> Open-source deep research agent system built end-to-end on the Pydantic stack (Pydantic AI,
+> Logfire, Pydantic Evals, Pydantic AI Gateway). Anthropic models only, CLI-first. Pipeline:
+> clarify (optional) → plan → parallel research waves with gap analysis and an evolving
+> compressed workspace → per-source adversarial claim verification → two-stage synthesis with
+> a critic gate → cited report (markdown + HTML). Checkpoint/resume, deterministic budget
+> enforcement, and code-owned citation numbering throughout.
+
+## Docs
+
+- [README](README.md): what it does, quickstart, flags, MCP usage, cost model
+- [AGENTS.md](AGENTS.md): repo rules, commands, architecture invariants, testing conventions
+- [JOURNAL.md](JOURNAL.md): the Builder Journal — dated log of design decisions, stack
+  learnings, costs, and accepted limitations (newest first)
+
+## Source map
+
+- [orchestrator.py](src/deepresearch/orchestrator.py): sequencing, budget policy, checkpoints
+- [config.py](src/deepresearch/config.py): profiles, model routing, caching/thinking, retries
+- [digest.py](src/deepresearch/digest.py): pure inter-stage digests, dedup, ranking, citations
+- [models.py](src/deepresearch/models.py): the shared typed vocabulary
+- [artifacts.py](src/deepresearch/artifacts.py): report assembly (md + derived HTML), run I/O
+- [agents/](src/deepresearch/agents/): agent definitions only — prompts + output validators
+- [mcp_server.py](src/deepresearch/mcp_server.py): the system exposed as an MCP tool
+
+## Evals
+
+- [evals/run_evals.py](evals/run_evals.py): live eval suite (objective + judge metrics)
+- [evals/judges.py](evals/judges.py): FACT-style citation accuracy, RACE-style rubric
+- [evals/experiments/](evals/experiments/): verifier A/B, pairwise win-rate
