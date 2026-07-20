@@ -1,6 +1,8 @@
-"""Golden-file test for report assembly: fixed inputs -> exact Markdown out."""
+"""Golden-file tests for report assembly: fixed inputs -> exact Markdown (and HTML) out."""
 
-from deepresearch.artifacts import assemble_report, claims_dump_report
+from pathlib import Path
+
+from deepresearch.artifacts import assemble_report, claims_dump_report, render_html
 from deepresearch.digest import build_citation_map
 from deepresearch.models import Claim, Outline, OutlineSection, SubQuestion, Verdict
 
@@ -71,6 +73,18 @@ def test_assemble_report_golden():
         unverifiable_count=1,
     )
     assert report == GOLDEN_REPORT
+
+
+def test_render_html_golden():
+    """HTML is derived from the assembled Markdown (the golden above) — never assembled
+    separately. Update the golden deliberately: regenerate, eyeball in a browser, commit."""
+    golden = (Path(__file__).parent / "goldens" / "report.html").read_text(encoding="utf-8")
+    assert render_html(GOLDEN_REPORT, title="Paris in Brief") == golden
+
+
+def test_render_html_escapes_title():
+    out = render_html("# x", title="<script>alert(1)</script>")
+    assert "<title>&lt;script&gt;alert(1)&lt;/script&gt;</title>" in out
 
 
 def test_claims_dump_report_structure():

@@ -112,6 +112,7 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 | `--max-revise` | critic-driven revise passes (default 2; `0` disables the critic loop — cheapest) |
 | `--resume` | continue an interrupted run from its `runs/<id>` directory (omit QUESTION) |
 | `-i, --interactive` | clarifying questions + editable plan gate before any money is spent |
+| `--html` | also render a standalone `report.html` (inline CSS, dark-mode aware) |
 | `--json` | print `run.json` to stdout (scriptable) |
 | `--plain` | line-based progress, no live UI |
 | `-q, --quiet` | no progress output |
@@ -119,6 +120,24 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 Per-role model overrides are env vars, e.g. `DEEPRESEARCH_MODELS__SYNTHESIZER=claude-opus-4-8`.
 
 </details>
+
+### Use from Claude (MCP)
+
+deepresearch ships an MCP server of itself: one `deep_research(question, depth, max_cost)` tool
+returning the cited report. Install the extra (`uv sync --extra mcp`) and register the stdio
+command in Claude Desktop / Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "deepresearch": {
+      "command": "uv",
+      "args": ["run", "--extra", "mcp", "deepresearch-mcp"],
+      "cwd": "/path/to/deep-research"
+    }
+  }
+}
+```
 
 ## Evals
 

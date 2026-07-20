@@ -10,6 +10,32 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 21 — 2026-07-20 — Two new surfaces: report.html and an MCP server of ourselves
+
+Phase 7 — distribution. Two ways for the work to leave the terminal:
+
+**`--html`**: a standalone `report.html` next to `report.md` — markdown-it-py (CommonMark),
+inline CSS, dark-mode via `prefers-color-scheme`, print stylesheet, zero assets. The rule that
+mattered: **HTML is derived from the assembled Markdown, never assembled separately** — the
+citation-numbering invariant lives in exactly one place (`assemble_report`), and `render_html`
+is a pure function over its output, golden-tested like the Markdown (`tests/goldens/
+report.html`, regenerated deliberately + eyeballed in a browser before committing). PDF stayed
+cut: weasyprint/wkhtmltopdf system deps contradict "trivially usable"; browsers print HTML.
+
+**`deepresearch-mcp`**: the gpt-researcher trick — expose the whole system as an MCP server of
+itself. FastMCP made this genuinely ~40 lines: one `deep_research(question, depth, max_cost)`
+tool wrapping `run_research`, report markdown + a metadata footer (run id, claim/verdict
+counts, cost, artifacts dir) back to the client. Guarded import with an actionable message;
+`mcp` is an optional extra (`uv sync --extra mcp`) but sits in the dev group so the offline
+tests always exercise the surface. Registry publication deferred until there's a PyPI package.
+
+Dev-ex notes: `@server.tool()` returns the undecorated function, so tests call
+`mcp_server.deep_research(...)` directly and monkeypatch `run_research` at module level — no
+MCP transport needed for offline wiring tests; `server.list_tools()` covers the schema side
+(question/depth/max_cost, docstring became the tool description verbatim — worth writing that
+docstring for the *client model* reading it, including the cost warning). 86 offline tests
+green. Cost: **$0**.
+
 ## Entry 20 — 2026-07-20 — HITL (--interactive) + a hermetic-test lesson the hard way
 
 Phase 6 — clarify-first and an editable plan gate, the two HITL patterns every commercial

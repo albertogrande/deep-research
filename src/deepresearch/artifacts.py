@@ -139,3 +139,54 @@ def write_report(text: str, run_dir: Path) -> Path:
     path = run_dir / "report.md"
     path.write_text(text, encoding="utf-8")
     return path
+
+
+# Self-contained page: inline CSS, no assets, dark-mode aware, print-friendly. HTML is always
+# DERIVED from the assembled Markdown — never assembled separately — so citation numbering
+# stays code-owned in exactly one place.
+_HTML_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root { --fg: #1c1c1c; --bg: #ffffff; --muted: #6b6b6b; --accent: #0b5fff; --rule: #e5e5e5; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #e6e6e6; --bg: #121212; --muted: #9a9a9a; --accent: #7aa2ff; --rule: #2a2a2a; }
+}
+body { margin: 0 auto; max-width: 46rem; padding: 2.5rem 1.25rem 5rem;
+       font: 17px/1.65 Georgia, 'Times New Roman', serif; color: var(--fg); background: var(--bg); }
+h1, h2 { font-family: system-ui, -apple-system, sans-serif; line-height: 1.25; }
+h1 { font-size: 1.9rem; margin: 0 0 1rem; }
+h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--rule); padding-bottom: .35rem; }
+blockquote { margin: 1.2rem 0; padding: .8rem 1.1rem; border-left: 3px solid var(--accent); }
+a { color: var(--accent); overflow-wrap: anywhere; }
+ol, ul { padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+em { color: var(--muted); }
+@media print { body { max-width: none; font-size: 12pt; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<article>
+__BODY__</article>
+</body>
+</html>
+"""
+
+
+def render_html(report_markdown: str, *, title: str) -> str:
+    """Pure Markdown -> standalone HTML page (markdown-it-py, CommonMark)."""
+    import html as _html
+
+    from markdown_it import MarkdownIt
+
+    body = MarkdownIt("commonmark").render(report_markdown)
+    return _HTML_PAGE.replace("__TITLE__", _html.escape(title)).replace("__BODY__", body)
+
+
+def write_html(text: str, run_dir: Path) -> Path:
+    path = run_dir / "report.html"
+    path.write_text(text, encoding="utf-8")
+    return path

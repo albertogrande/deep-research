@@ -198,6 +198,9 @@ def research(
             "--max-revise", help="Critic-driven revise passes (0 disables the critic loop; cheaper)."
         ),
     ] = None,
+    html_out: Annotated[
+        bool, typer.Option("--html", help="Also render report.html next to report.md.")
+    ] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Print run.json to stdout.")] = False,
     plain: Annotated[bool, typer.Option("--plain", help="Line-based progress (no live UI).")] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="No progress output.")] = False,
@@ -249,10 +252,22 @@ def research(
         raise typer.Exit(1) from None
 
     record = result.record
+    html_path = None
+    if html_out and result.report_path is not None:
+        from .artifacts import render_html, write_html
+
+        md_text = result.report_path.read_text(encoding="utf-8")
+        title = next(
+            (line[2:].strip() for line in md_text.splitlines() if line.startswith("# ")), record.run_id
+        )
+        html_path = write_html(render_html(md_text, title=title), result.run_dir)
+
     if json_output:
         console.print_json(record.model_dump_json())
     elif not quiet:
         _print_summary(record, record.report_path)
+        if html_path is not None:
+            console.print(f"[dim]html: {html_path}[/dim]")
 
     if not record.synthesis_ok:
         err_console.print("[yellow]report synthesis fell back to a claims dump (exit 2)[/yellow]")
