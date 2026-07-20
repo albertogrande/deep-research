@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/albertogrande/deep-research/discussions
+    about: For questions and open-ended ideas, use Discussions.

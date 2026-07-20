@@ -1,0 +1,37 @@
+name: Bug report
+description: Something broke or behaved wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, what did you get instead?
+      placeholder: |
+        uv run deepresearch "..." --depth quick
+        expected: ...  got: ...
+    validations:
+      required: true
+  - type: textarea
+    id: run-context
+    attributes:
+      label: Run context
+      description: >
+        Exit code, the summary table, and (if you can share it) the relevant part of
+        run.json — it contains no credentials. For crashes, the traceback.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.1.0, or a commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: routing
+    attributes:
+      label: Routing
+      options: [gateway (default), direct, split, offline/tests]
+    validations:
+      required: false

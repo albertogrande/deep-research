@@ -10,6 +10,47 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 25 — 2026-07-20 — Retrospective: the SOTA effort, phases 1–12, $0 spent
+
+Final entry of the "make it SOTA-comparable" effort (entries 15–24 are the per-phase logs).
+This one closes it out with the community layer — CONTRIBUTING / CODE_OF_CONDUCT / SECURITY /
+CITATION.cff, issue forms + PR template (checklist includes the journal mandate), a vhs
+`docs/demo.tape` (GIF rendering deferred to the live checklist — it needs one paid run), and
+the README overhaul: positioning table, live-validation checklist, updated highlights and
+limitations.
+
+**Before → after, in one map.** Where v1 stopped at "plan → research → verify → synthesize
+with a critic": researchers now compress their own branches into an evolving workspace digest
+with wave deltas (the field's best-measured scaffold technique); questions and claims dedup
+semantically with cross-source corroboration as a live signal; caching/thinking/retries are
+engineered per role in one config table; budget enforcement became predictive instead of
+post-hoc; every run checkpoints and resumes; humans can clarify and edit the plan pre-spend;
+reports ship as HTML too; the system is a library and an MCP server, not just a CLI; the
+evals measure citation accuracy the way DeepResearch Bench does, compare arms pairwise
+position-swapped, and assert pipeline shape offline in CI; and the repo itself became
+agent-native (AGENTS.md, committed .claude/, a hook enforcing this very journal). Packaging:
+pyright-clean, py.typed, CI matrix, trusted publishing. 54 → 91 offline tests.
+
+**What was deliberately NOT built** (the cut list, so future-me doesn't relitigate):
+parallel section writing (measured negative result — disjoint reports); FallbackModel
+(same-provider fallback would silently corrupt per-role pricing); token-level streaming (big
+surface, zero measured quality effect); PDF (system deps vs "trivially usable"); a post-hoc
+grounding pipeline stage (contested value — we *measure* grounding instead); embedding/judge
+dedup (no embedding endpoint under Anthropic-only; string similarity is free and catches the
+bulk); DeferredToolRequests for the plan gate (tool-approval API, wrong layer); YAML agent
+specs (dynamic RunContext instructions would regress); MCP Registry + cross-tool benchmarks
+(need a published package and real spend).
+
+**The meta-learning of the effort**: the constraint "no live spend" turned out to be a design
+pressure, not a handicap — it forced hermetic tests (which caught a real hazard: silently
+network-capable model objects), offline behavioral evals, deterministic dedup, and a
+scripted-pipeline discipline that makes every capability testable at $0. The two places the
+constraint genuinely bites are honest placeholders: the README's A/B table and citation-
+accuracy number wait on the documented ~$9–12 live checklist.
+
+**Total spend across the entire effort: $0.** Ten pushes, ten journal entries, one hang
+diagnosed to a proxy, zero API charges. The live checklist is ready when the user is.
+
 ## Entry 24 — 2026-07-20 — Packaging grows up: pyright clean, CI matrix, trusted publishing
 
 Phase 11 — the boring-but-load-bearing layer.

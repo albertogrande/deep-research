@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a capability or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The use case first — proposals are judged by the run they improve.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach (optional)
+      description: >
+        If you have a shape in mind. Note the architecture invariants in AGENTS.md —
+        e.g. policy lives in the orchestrator, agents stay definition-only, citation
+        numbering stays code-owned.
+    validations:
+      required: false
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost impact
+      description: Would this add model calls, searches, or latency to a run?
+    validations:
+      required: false

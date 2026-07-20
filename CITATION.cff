@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use deepresearch in your research or writing, please cite it as below."
+title: "deepresearch: a deep research agent system with adversarial claim verification"
+type: software
+authors:
+  - family-names: "Grande"
+    given-names: "Alberto"
+    email: grande.temprado@gmail.com
+repository-code: "https://github.com/albertogrande/deep-research"
+license: MIT
+keywords:
+  - deep-research
+  - agents
+  - pydantic-ai
+  - claim-verification
+  - llm
