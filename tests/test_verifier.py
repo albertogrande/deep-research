@@ -127,6 +127,69 @@ async def test_verifier_crash_degrades_to_unverifiable(quick_settings, planner_m
     assert all("verifier failed" in v.reasoning for v in record.verdicts)
 
 
+async def test_budget_exhaustion_mid_verification_skips_remaining_sources(
+    quick_settings, planner_model, monkeypatch
+):
+    """Budget runs out after the first source: later sources degrade to 'skipped' verdicts
+    while the verdicts already earned are kept."""
+    import deepresearch.deps as deps_mod
+    import deepresearch.orchestrator as orch
+
+    monkeypatch.setattr(orch, "VERIFY_CONCURRENCY", 1)  # deterministic source order
+    calls = {"n": 0}
+
+    def fake_remaining(self, ledger):
+        calls["n"] += 1
+        # call 1: stage-entry check; call 2: first source's guard; then the money is gone.
+        return 1.0 if calls["n"] <= 2 else 0.0
+
+    monkeypatch.setattr(deps_mod.Budget, "remaining_fraction", fake_remaining)
+
+    two_source_findings = {
+        "claims": [
+            {
+                "statement": "Paris is the capital of France.",
+                "supporting_quote": "q1",
+                "source_url": "https://a.example.com/one",
+                "source_title": "A",
+                "confidence": "high",
+            },
+            {
+                "statement": "Paris has about 2.1 million inhabitants.",
+                "supporting_quote": "q2",
+                "source_url": "https://b.example.org/two",
+                "source_title": "B",
+                "confidence": "medium",
+            },
+        ],
+        "search_queries_used": [],
+        "notes": "",
+        "summary": "done",
+    }
+
+    def scripted_verifier(messages, info: AgentInfo) -> ModelResponse:
+        ids = _sniff_claim_ids(messages)
+        args = {
+            "source_url": "https://a.example.com/one",
+            "fetch_ok": True,
+            "verdicts": [{"claim_id": cid, "verdict": "supported", "reasoning": "ok"} for cid in ids],
+        }
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, args)])
+
+    r_agent = researcher_agent(quick_settings.prof.searches_per_researcher)
+    with (
+        planner_agent.override(model=planner_model),
+        r_agent.override(model=TestModel(custom_output_args=two_source_findings), native_tools=[]),
+        verifier_agent.override(model=FunctionModel(scripted_verifier), native_tools=[]),
+    ):
+        result = await run_research(QUERY, quick_settings)
+
+    by_id = {v.claim_id: v for v in result.record.verdicts}
+    assert by_id["c-001"].verdict == "supported"  # earned before the cap hit
+    assert by_id["c-002"].verdict == "unverifiable"
+    assert by_id["c-002"].reasoning == "skipped: budget cap reached mid-verification"
+
+
 async def test_no_verify_flag_skips_verification(quick_settings, planner_model):
     no_verify = quick_settings.model_copy(update={"verify": False})
 

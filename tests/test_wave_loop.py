@@ -124,6 +124,44 @@ async def test_budget_breach_stops_new_waves_but_run_completes(std_settings, std
     assert record.claims  # wave-1 claims survive
 
 
+async def test_unaffordable_second_wave_is_skipped_predictively(std_settings, std_plan_args, monkeypatch):
+    """Wave 1 measures at $0.60 of a $1.00 cap. Remaining $0.40 < 0.8 x $0.60, so wave 2 is
+    never launched — the gate predicts the overshoot instead of catching it afterwards."""
+    import deepresearch.deps as deps_mod
+
+    calls = {"n": 0}
+
+    def fake_estimate(self, ledger):
+        calls["n"] += 1
+        return 0.0 if calls["n"] == 1 else 0.6  # first call = cost_before wave 1
+
+    monkeypatch.setattr(deps_mod.Budget, "estimate", fake_estimate)
+    settings = std_settings.model_copy(update={"max_cost": 1.0, "verify": False})
+    follow_ups = [{"question": "How has the population changed since 2000?", "rationale": "gap"}]
+
+    def exploding_researcher_wave2(messages, info: AgentInfo) -> ModelResponse:
+        prompt = "".join(
+            str(getattr(part, "content", "")) for m in messages for part in getattr(m, "parts", [])
+        )
+        if "sq-04" in prompt:  # pragma: no cover
+            raise AssertionError("wave 2 researcher must not run when unaffordable")
+        output_tool = info.output_tools[0]
+        return ModelResponse(parts=[ToolCallPart(output_tool.name, FINDINGS_ARGS)])
+
+    r_agent = researcher_agent(settings.prof.searches_per_researcher)
+    with (
+        planner_agent.override(model=TestModel(custom_output_args=std_plan_args)),
+        r_agent.override(model=FunctionModel(exploding_researcher_wave2), native_tools=[]),
+        gap_analyst_agent.override(model=gap_model(saturated=False, follow_ups=follow_ups)),
+    ):
+        result = await run_research(QUERY, settings)
+
+    record = result.record
+    assert record.waves_run == 1
+    assert any("wave 2 skipped: remaining budget" in lim for lim in record.limitations)
+    assert record.claims  # wave-1 work is kept
+
+
 async def test_wave2_researchers_get_known_so_far_brief(std_settings, std_plan_args):
     follow_ups = [{"question": "How has the population changed since 2000?", "rationale": "gap"}]
     prompts_by_sq: dict[str, str] = {}

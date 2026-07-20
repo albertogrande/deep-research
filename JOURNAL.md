@@ -10,6 +10,36 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 18 — 2026-07-20 — Effort scaling, evidence-aware stopping, and predictive budget guards
+
+Phase 4 — the "spend shape" phase. Anthropic's multi-agent research post says effort-scaling
+rules must be *explicit in prompts* (models default to over- or under-researching); LangChain
+and Jina both stop on marginal value, not completeness. Three changes, two of them prompt-only:
+
+- **Planner effort scaling**: the planner now gets "scale effort to the question, not to the
+  allowed maximum" with the profile's own bounds spelled into the heuristic, plus "scope each
+  sub-question to ~{searches_per_researcher} searches". The profile stays the hard bound
+  (validator unchanged); the prompt shapes *where inside the bound* the plan lands.
+- **Evidence-aware stopping**: the gap analyst is told to weigh the marginal value of the last
+  wave using the NEW THIS WAVE section from entry 15 — "mostly corroborations or few new
+  domains → saturating". This is where Phase 1's `[NEW]` markers pay off; the rubric would be
+  unactionable without the digest making wave deltas visible.
+- **Two budget guards in the orchestrator** (policy stays out of agents):
+  1. *Wave affordability gate*: each wave's measured cost delta is recorded
+     (`_RunState.wave_costs`); wave n≥2 only launches if remaining budget ≥ 0.8× the last
+     wave's cost. Predictive — the existing `budget.checkpoint` only catches overshoot after
+     the money is gone, which entry 13's live run demonstrated concretely (the $0.42 run
+     sailed past its $0.40 cap between checkpoints). 0.8 because follow-up waves are usually
+     smaller than wave 1 (fewer questions), so demanding 100% would over-refuse.
+  2. *Mid-verification stop*: verification fans out per source; once the cap is hit, sources
+     still waiting on the semaphore short-circuit to `unverifiable` with reasoning
+     "skipped: budget cap reached mid-verification". Verdicts already earned are kept.
+
+Testing note: both guards were testable by monkeypatching `Budget.estimate` /
+`Budget.remaining_fraction` at the class level with call-counting fakes — no ledger gymnastics
+needed. `VERIFY_CONCURRENCY` monkeypatched to 1 makes the verification-order test
+deterministic. 73 offline tests green. Cost: **$0**.
+
 ## Entry 17 — 2026-07-19 — Model layer: prompt caching, adaptive thinking, transport retries
 
 Phase 3 — the "use Pydantic AI V2 properly" phase. Everything lives in `config.py` next to

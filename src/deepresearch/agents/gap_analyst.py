@@ -33,6 +33,9 @@ materially change the final report — or whether specific gaps remain.
 Rules:
 - Judge coverage against the plan's done_criteria, not against perfection. Mark each \
 sub-question covered / partial / uncovered.
+- Weigh the MARGINAL VALUE of the last wave: if NEW THIS WAVE is mostly corroborations of \
+already-known claims, or added few distinct domains, the research is saturating — say so. \
+Marginal value decides, not completeness.
 - If not saturated: emit at most {MAX_FOLLOW_UPS} follow-up questions targeting the most \
 important gaps ONLY. A good follow-up is narrower than the original sub-question, searchable, \
 and must NOT restate any already-asked question (the digest lists them).

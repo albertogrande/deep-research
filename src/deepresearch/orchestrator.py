@@ -99,6 +99,10 @@ VERIFY_CONCURRENCY = 4
 # and must always be affordable.
 VERIFY_MIN_BUDGET_FRACTION = 0.25
 
+# Don't launch another wave unless the remaining budget covers this fraction of the previous
+# wave's measured cost — predictive, where budget.checkpoint only catches overshoot after it.
+WAVE_AFFORDABILITY_FACTOR = 0.8
+
 TRANSIENT_RETRY_DELAY_S = 2.0  # module-level so tests can monkeypatch it away
 
 
@@ -147,6 +151,7 @@ class _RunState:
     summaries_by_sq: dict[str, str] = field(default_factory=dict)
     failed_sq_ids: set[str] = field(default_factory=set)
     limitations: list[str] = field(default_factory=list)
+    wave_costs: list[float] = field(default_factory=list)
 
 
 async def _run_agent(
@@ -280,6 +285,18 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
 
     for wave_n in range(1, settings.prof.max_waves + 1):
         t0 = time.perf_counter()
+        # Affordability gate: launching a wave we can't finish wastes its whole cost, so
+        # require the remaining budget to cover most of what the last wave actually cost.
+        if wave_n > 1 and state.wave_costs:
+            remaining = deps.budget.max_cost_usd - deps.budget.estimate(deps.ledger)
+            needed = WAVE_AFFORDABILITY_FACTOR * state.wave_costs[-1]
+            if remaining < needed:
+                state.limitations.append(
+                    f"wave {wave_n} skipped: remaining budget ${remaining:.2f} would not cover "
+                    f"a wave like the last one (${state.wave_costs[-1]:.2f})"
+                )
+                return
+        cost_before = deps.budget.estimate(deps.ledger)
         # Wave-1 researchers run isolated (full parallelism, no shared context to bias them);
         # later waves get a compressed what-we-know brief so follow-ups target the gap.
         known = ""
@@ -317,6 +334,7 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
                 raise BudgetFatalError(str(budget_fatal)) from budget_fatal
         timings[f"wave_{wave_n}"] = time.perf_counter() - t0
         record.waves_run = wave_n
+        state.wave_costs.append(deps.budget.estimate(deps.ledger) - cost_before)
         emit(CostUpdate(deps.budget.estimate(deps.ledger), deps.budget.max_cost_usd))
 
         try:
@@ -396,6 +414,22 @@ async def _verification_stage(deps: Deps, record: RunRecord, state: _RunState, t
 
     async def verify_source(url: str, claims: list[Claim]) -> SourceVerification:
         async with sem:
+            # Mid-stage guard: once the cap is hit, later sources degrade to unverifiable
+            # instead of spending past the cap. Verdicts already earned are kept.
+            if deps.budget.remaining_fraction(deps.ledger) <= 0:
+                counters["done"] += 1
+                return SourceVerification(
+                    source_url=url,
+                    fetch_ok=False,
+                    verdicts=[
+                        Verdict(
+                            claim_id=c.id,
+                            verdict="unverifiable",
+                            reasoning="skipped: budget cap reached mid-verification",
+                        )
+                        for c in claims
+                    ],
+                )
             try:
                 result = await _run_agent(
                     verifier_agent,

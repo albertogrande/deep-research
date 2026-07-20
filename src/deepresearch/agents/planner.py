@@ -31,6 +31,12 @@ main question) and answerable via web search.
 - Sub-questions must not overlap; together they should span the main question's key facets: \
 core facts, recent developments, opposing evidence or viewpoints, and practical implications \
 where relevant.
+- SCALE EFFORT TO THE QUESTION, not to the allowed maximum. A simple factual question \
+deserves {prof.min_sub_questions} tightly-scoped sub-questions; only a genuinely multi-facet \
+or contested question deserves {prof.max_sub_questions}, spanning distinct perspectives. \
+Every sub-question costs real researcher time and money.
+- Scope each sub-question to what one researcher can establish with about \
+{prof.searches_per_researcher} web searches — narrower beats sprawling.
 - Prefer questions whose answers are checkable facts over open musings.
 - done_criteria: 2-5 observable statements describing what a complete answer contains.
 
