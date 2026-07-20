@@ -97,6 +97,8 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 
 **Minimum-cost run** (~$0.24, still a real cited report): `--depth quick --no-verify --max-revise 0`. At the `quick` tier the search cost is the floor (9 searches × $0.01 = $0.09); the revise loop is the biggest saveable lever, so `--max-revise 0` is where most of the savings come from.
 
+**Interrupted?** Every run checkpoints after each stage — `deepresearch --resume runs/<id>` continues where it stopped, with the money already spent still counted against the original cap.
+
 <details>
 <summary>All flags</summary>
 
@@ -108,6 +110,7 @@ Exit codes: `0` ok · `1` fatal · `2` synthesis fell back to a claims dump · `
 | `--routing` | `gateway` · `direct` · `split` (server-tool roles direct, rest via gateway) |
 | `--no-verify` | skip claim verification |
 | `--max-revise` | critic-driven revise passes (default 2; `0` disables the critic loop — cheapest) |
+| `--resume` | continue an interrupted run from its `runs/<id>` directory (omit QUESTION) |
 | `--json` | print `run.json` to stdout (scriptable) |
 | `--plain` | line-based progress, no live UI |
 | `-q, --quiet` | no progress output |

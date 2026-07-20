@@ -129,11 +129,11 @@ async def test_unaffordable_second_wave_is_skipped_predictively(std_settings, st
     never launched — the gate predicts the overshoot instead of catching it afterwards."""
     import deepresearch.deps as deps_mod
 
-    calls = {"n": 0}
-
     def fake_estimate(self, ledger):
-        calls["n"] += 1
-        return 0.0 if calls["n"] == 1 else 0.6  # first call = cost_before wave 1
+        # $0 before any researcher has run, $0.60 after — robust to how often the
+        # orchestrator (checkpoints, cost events) asks in between.
+        researcher = ledger.by_role.get("researcher")
+        return 0.6 if researcher and researcher.requests else 0.0
 
     monkeypatch.setattr(deps_mod.Budget, "estimate", fake_estimate)
     settings = std_settings.model_copy(update={"max_cost": 1.0, "verify": False})

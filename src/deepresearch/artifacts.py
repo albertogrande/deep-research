@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .digest import CitationMap
-from .models import Claim, Outline, RunRecord, SubQuestion, Verdict
+from .models import Checkpoint, Claim, Outline, RunRecord, SubQuestion, Verdict
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
@@ -36,6 +36,26 @@ def write_run_record(record: RunRecord, run_dir: Path) -> Path:
     path = run_dir / "run.json"
     path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
     return path
+
+
+def write_checkpoint(checkpoint: Checkpoint, run_dir: Path) -> Path:
+    path = run_dir / "checkpoint.json"
+    path.write_text(checkpoint.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_checkpoint(run_dir: Path) -> Checkpoint:
+    path = run_dir / "checkpoint.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no checkpoint.json in {run_dir} — either the run finished (checkpoints are "
+            "removed on success) or this is not a run directory"
+        )
+    return Checkpoint.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def delete_checkpoint(run_dir: Path) -> None:
+    (run_dir / "checkpoint.json").unlink(missing_ok=True)
 
 
 def _references_block(citations: CitationMap, date_accessed: str) -> list[str]:

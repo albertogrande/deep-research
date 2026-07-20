@@ -126,7 +126,13 @@ def _print_summary(record: RunRecord, report_path: str | None) -> None:
 
 @app.command()
 def research(
-    question: Annotated[str, typer.Argument(help="The research question.")],
+    question: Annotated[
+        str | None, typer.Argument(help="The research question (omit when using --resume).")
+    ] = None,
+    resume: Annotated[
+        str | None,
+        typer.Option("--resume", help="Resume an interrupted run from its runs/<id> directory."),
+    ] = None,
     depth: Annotated[
         str | None, typer.Option("--depth", "-d", help=f"One of: {', '.join(PROFILES)}.")
     ] = None,
@@ -144,20 +150,31 @@ def research(
     plain: Annotated[bool, typer.Option("--plain", help="Line-based progress (no live UI).")] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="No progress output.")] = False,
 ) -> None:
-    """Run deep research on QUESTION and write report.md + run.json."""
+    """Run deep research on QUESTION (or continue an interrupted run with --resume) and
+    write report.md + run.json."""
+    from pathlib import Path
+
     from .orchestrator import BudgetFatalError, run_research  # deferred: keeps `--help` fast
 
+    if (question is None) == (resume is None):
+        err_console.print("[red]provide either QUESTION or --resume RUN_DIR (not both)[/red]")
+        raise typer.Exit(1)
+
     settings = _build_settings(depth, output, max_cost, routing, False if no_verify else None, max_revise)
+    resume_from = Path(resume) if resume else None
+    headline = question or f"resume: {resume}"
 
     silent = quiet or json_output
     use_live = not silent and not plain and err_console.is_terminal
 
     async def _run():
         if use_live:
-            with LiveProgress(err_console, question, settings.profile, settings.routing) as live:
-                return await run_research(question, settings, on_event=live.emit)
+            with LiveProgress(err_console, headline, settings.profile, settings.routing) as live:
+                return await run_research(
+                    question or "", settings, on_event=live.emit, resume_from=resume_from
+                )
         on_event = None if silent else _plain_printer()
-        return await run_research(question, settings, on_event=on_event)
+        return await run_research(question or "", settings, on_event=on_event, resume_from=resume_from)
 
     try:
         result = asyncio.run(_run())

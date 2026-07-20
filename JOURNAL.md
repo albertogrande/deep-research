@@ -10,6 +10,44 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 19 — 2026-07-20 — Resume: every run is now interruptible
+
+Phase 5 — durable execution, the capability every commercial deep-research product ships
+(background execution + resume) and almost no OSS scaffold does. `deepresearch --resume
+runs/<id>` continues an interrupted run from its last completed stage.
+
+**The design that made it small**: `RunRecord` already carries plan, claims, verdicts, usage,
+searches, limitations — so the checkpoint is just `{stage, record, queue, seen_questions,
+notes/summaries_by_sq, wave_costs}`. No parallel state schema, no serialization format beyond
+the Pydantic models we already had. `checkpoint.json` is written after plan ("planned"), after
+each gap decision ("wave_done" + the next wave's queue), after the wave loop and verification
+conclude ("wave_done" queue=[] / "verified"), and deleted on successful report write — a
+finished run has no checkpoint.
+
+Decisions and subtleties worth recording:
+- **Checkpoint granularity is stage-level, not per-agent-call.** An interrupt mid-wave re-runs
+  that whole wave on resume; `enrich_and_dedup_claims` folds re-found claims so nothing
+  duplicates (corroboration counts can inflate slightly — accepted and documented here).
+- **checkpoint.json vs run.json**: the finally-block flushes run.json at *interrupt time*
+  (fresher), but resume reads only the checkpoint's embedded record (*consistent*). Mixing
+  them would half-restore a wave. The split of concerns fell out naturally: run.json = audit,
+  checkpoint.json = resume point.
+- **The cap still binds across resumes**: `UsageLedger.restore()` rebuilds per-role RunUsage
+  from the snapshot so `Budget.estimate` prices prior spend. One trap found while writing it:
+  search reconciliation replaces the search counter with real provider counters, which only
+  cover the current process — a `restored_searches` floor keeps resumed searches counted.
+- **`--resume` is a flag, not a subcommand** — Typer would otherwise force
+  `deepresearch research "q"` and break the headline UX.
+- **Test-suite find**: you cannot test Ctrl-C with a literal `KeyboardInterrupt` inside
+  pytest-asyncio — asyncio special-cases KI in `Task.__step` and it aborts the whole event
+  loop (and pytest session). A custom `BaseException` subclass behaves identically for our
+  purposes (bypasses every `except Exception` degrade path) but propagates through awaits.
+
+The finally-flush guarantee from the original architecture paid off here: interrupts already
+wrote run.json, so adding checkpoints was pure addition — no error-path rework. A refactor
+that helped: the finally block's field-flushing became `_flush_record`, shared by checkpoint
+writes. 77 offline tests green (4 new resume tests). Cost: **$0**.
+
 ## Entry 18 — 2026-07-20 — Effort scaling, evidence-aware stopping, and predictive budget guards
 
 Phase 4 — the "spend shape" phase. Anthropic's multi-agent research post says effort-scaling

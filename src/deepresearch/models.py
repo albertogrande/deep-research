@@ -186,3 +186,23 @@ class RunRecord(BaseModel):
     final_coverage: list[SubQuestionCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     report_path: str | None = None
+
+
+class Checkpoint(BaseModel):
+    """Resume point written to checkpoint.json after each completed pipeline stage.
+
+    ``record`` doubles as the state payload (plan, claims, verdicts, usage, searches all live
+    there already) — only the orchestrator working state that RunRecord does not carry is
+    stored alongside. A finished run has no checkpoint (deleted on successful report write).
+    """
+
+    stage: Literal["planned", "wave_done", "verified"]
+    record: RunRecord
+    queue: list[SubQuestion] = Field(
+        default_factory=list,
+        description="Sub-questions for the next unlaunched wave; empty when the wave loop is done.",
+    )
+    seen_questions: list[str] = Field(default_factory=list)  # normalized dedup keys
+    notes_by_sq: dict[str, str] = Field(default_factory=dict)
+    summaries_by_sq: dict[str, str] = Field(default_factory=dict)
+    wave_costs: list[float] = Field(default_factory=list)

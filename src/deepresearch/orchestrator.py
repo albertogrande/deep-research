@@ -35,7 +35,10 @@ from .artifacts import (
     assemble_report,
     claims_dump_report,
     create_run_dir,
+    delete_checkpoint,
+    load_checkpoint,
     new_run_id,
+    write_checkpoint,
     write_report,
     write_run_record,
 )
@@ -54,6 +57,7 @@ from .digest import (
     section_prompt,
 )
 from .models import (
+    Checkpoint,
     Claim,
     FailedSubQuestion,
     Findings,
@@ -195,52 +199,133 @@ def _researcher_prompt(main_query: str, sq: SubQuestion, known_so_far: str = "")
 
 def _reconcile_searches(ledger: UsageLedger) -> None:
     """Replace the conservative per-run search estimate with real provider counters when
-    the SDK surfaces them (usage.details keys containing 'web_search')."""
+    the SDK surfaces them (usage.details keys containing 'web_search'). Counters only cover
+    the current process, so a resumed run's restored searches are added back on top."""
     total = 0
     for usage in ledger.by_role.values():
         for key, value in (usage.details or {}).items():
             if "web_search" in key:
                 total += value
     if total:
-        ledger.searches = total
+        ledger.searches = ledger.restored_searches + total
+
+
+def _flush_record(record: RunRecord, state: _RunState, deps: Deps, timings: dict[str, float]) -> None:
+    """Bring the RunRecord up to date with live orchestrator state — called before every
+    checkpoint write and in the run's finally block (so interrupts flush too)."""
+    _reconcile_searches(deps.ledger)
+    record.sub_questions = state.sub_questions
+    record.claims = state.claims
+    record.limitations = state.limitations
+    record.usage = deps.ledger.snapshot(deps.settings)
+    record.searches_used = deps.ledger.searches
+    record.cost_estimate_usd = round(deps.budget.estimate(deps.ledger), 4)
+    record.timings = {k: round(v, 2) for k, v in timings.items()}
+
+
+def _write_stage_checkpoint(
+    stage: str,
+    deps: Deps,
+    record: RunRecord,
+    state: _RunState,
+    timings: dict[str, float],
+    queue: list[SubQuestion],
+    run_dir: Path,
+) -> None:
+    _flush_record(record, state, deps, timings)
+    write_checkpoint(
+        Checkpoint(
+            stage=stage,  # type: ignore[arg-type]
+            record=record,
+            queue=queue,
+            seen_questions=sorted(state.seen_questions),
+            notes_by_sq=state.notes_by_sq,
+            summaries_by_sq=state.summaries_by_sq,
+            wave_costs=state.wave_costs,
+        ),
+        run_dir,
+    )
 
 
 async def run_research(
     query: str,
     settings: Settings,
     on_event: Callable[[ProgressEvent], None] | None = None,
+    resume_from: Path | None = None,
 ) -> RunResult:
     emit = on_event or (lambda _e: None)
     setup_telemetry()
 
-    run_id = new_run_id(query)
-    run_dir = create_run_dir(settings.output_dir, run_id)
+    checkpoint = load_checkpoint(Path(resume_from)) if resume_from is not None else None
+    if checkpoint is not None:
+        record = checkpoint.record
+        query = record.query
+        run_id = record.run_id
+        run_dir = Path(resume_from)
+    else:
+        run_id = new_run_id(query)
+        run_dir = create_run_dir(settings.output_dir, run_id)
+        record = RunRecord(
+            run_id=run_id,
+            query=query,
+            profile=settings.profile,
+            routing=settings.routing,
+            models_used={role: resolve_model(role, settings) for role in ROLES},
+        )
+
     ledger = UsageLedger()
     budget = Budget(max_cost_usd=settings.effective_max_cost, settings=settings)
     today = datetime.now(UTC).date().isoformat()
     deps = Deps(settings=settings, budget=budget, ledger=ledger, run_id=run_id, today=today)
 
-    record = RunRecord(
-        run_id=run_id,
-        query=query,
-        profile=settings.profile,
-        routing=settings.routing,
-        models_used={role: resolve_model(role, settings) for role in ROLES},
-    )
     timings: dict[str, float] = {}
     state = _RunState()
+    if checkpoint is not None:
+        # Rehydrate working state; the checkpointed record IS the state payload, so the prior
+        # spend counts against the cap and claim/sq numbering continues where it stopped.
+        ledger.restore(record.usage, record.searches_used)
+        state.claims = list(record.claims)
+        state.sub_questions = list(record.sub_questions)
+        state.seen_questions = set(checkpoint.seen_questions)
+        state.notes_by_sq = dict(checkpoint.notes_by_sq)
+        state.summaries_by_sq = dict(checkpoint.summaries_by_sq)
+        state.failed_sq_ids = {f.sub_question_id for f in record.failed_sub_questions}
+        state.limitations = list(record.limitations)
+        state.wave_costs = list(checkpoint.wave_costs)
+        timings = dict(record.timings)
+        if record.profile != settings.profile:
+            state.limitations.append(
+                f"resumed with profile {settings.profile!r} (run started as {record.profile!r})"
+            )
 
     report_path: Path | None = None
     try:
         with logfire.span("research run", query=query, profile=settings.profile, run_id=run_id):
             record.logfire_trace_id = current_trace_id()
             try:
-                plan = await _plan_stage(query, deps, record, timings, emit)
-                state.sub_questions = assign_sub_question_ids(
-                    dedup_questions(plan.sub_questions, state.seen_questions), wave=1
-                )
-                await _wave_loop(query, plan.done_criteria, deps, record, state, timings, emit)
-                await _verification_stage(deps, record, state, timings, emit)
+                if checkpoint is None:
+                    plan = await _plan_stage(query, deps, record, timings, emit)
+                    state.sub_questions = assign_sub_question_ids(
+                        dedup_questions(plan.sub_questions, state.seen_questions), wave=1
+                    )
+                    queue = list(state.sub_questions)
+                    done_criteria = list(plan.done_criteria)
+                    stage = "planned"
+                    _write_stage_checkpoint("planned", deps, record, state, timings, queue, run_dir)
+                else:
+                    queue = list(checkpoint.queue)
+                    done_criteria = list(record.plan.done_criteria) if record.plan else []
+                    stage = checkpoint.stage
+                    if record.plan:
+                        emit(PlanReady(len(record.plan.sub_questions), tuple(done_criteria)))
+                if stage != "verified":
+                    if queue:
+                        await _wave_loop(
+                            query, done_criteria, deps, record, state, timings, emit, queue, run_dir
+                        )
+                        _write_stage_checkpoint("wave_done", deps, record, state, timings, [], run_dir)
+                    await _verification_stage(deps, record, state, timings, emit)
+                    _write_stage_checkpoint("verified", deps, record, state, timings, [], run_dir)
             except BudgetFatalError:
                 # Research aborted mid-flight; leave the best artifact we can, then surface it.
                 record.synthesis_ok = False
@@ -249,17 +334,12 @@ async def run_research(
                 )
                 raise
             report_path = await _synthesis_stage(query, deps, record, state, run_dir, timings, emit)
+            if report_path is not None and record.synthesis_ok:
+                delete_checkpoint(run_dir)  # a finished run needs no resume point
             emit(CostUpdate(deps.budget.estimate(deps.ledger), deps.budget.max_cost_usd))
     finally:
         # Always flush the audit trail — including on errors and Ctrl-C.
-        _reconcile_searches(ledger)
-        record.sub_questions = state.sub_questions
-        record.claims = state.claims
-        record.limitations = state.limitations
-        record.usage = ledger.snapshot(settings)
-        record.searches_used = ledger.searches
-        record.cost_estimate_usd = round(budget.estimate(ledger), 4)
-        record.timings = {k: round(v, 2) for k, v in timings.items()}
+        _flush_record(record, state, deps, timings)
         write_run_record(record, run_dir)
 
     return RunResult(record=record, run_dir=run_dir, report_path=report_path)
@@ -279,11 +359,13 @@ async def _plan_stage(query, deps: Deps, record: RunRecord, timings, emit):
     return plan
 
 
-async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState, timings, emit) -> None:
+async def _wave_loop(
+    query, done_criteria, deps: Deps, record, state: _RunState, timings, emit, queue, run_dir: Path
+) -> None:
     settings = deps.settings
-    queue = list(state.sub_questions)
+    start_wave = queue[0].wave if queue else 1
 
-    for wave_n in range(1, settings.prof.max_waves + 1):
+    for wave_n in range(start_wave, settings.prof.max_waves + 1):
         t0 = time.perf_counter()
         # Affordability gate: launching a wave we can't finish wastes its whole cost, so
         # require the remaining budget to cover most of what the last wave actually cost.
@@ -359,6 +441,9 @@ async def _wave_loop(query, done_criteria, deps: Deps, record, state: _RunState,
             return
         queue = assign_sub_question_ids(fresh, wave=wave_n + 1, start_index=len(state.sub_questions) + 1)
         state.sub_questions.extend(queue)
+        # Resume point: next wave decided but not launched — an interrupt during wave n+1
+        # re-runs only that wave (dedup folds any re-found claims).
+        _write_stage_checkpoint("wave_done", deps, record, state, timings, queue, run_dir)
 
 
 async def _gap_stage(query, done_criteria, deps: Deps, record, state: _RunState, timings, emit):

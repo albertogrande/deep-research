@@ -58,6 +58,26 @@ class UsageLedger:
 
     by_role: dict[str, RunUsage] = field(default_factory=dict)
     searches: int = 0
+    # Searches restored from a checkpoint on resume. Kept separately because search
+    # reconciliation replaces `searches` with real provider counters, which only cover the
+    # CURRENT process — the restored count must survive that replacement.
+    restored_searches: int = 0
+
+    def restore(self, usage: dict[str, RoleUsage], searches: int) -> None:
+        """Rebuild the ledger from a checkpoint snapshot so `Budget.estimate` counts the
+        interrupted run's spend and the original cap still binds after resume."""
+        for role, ru in usage.items():
+            self.by_role.setdefault(role, RunUsage()).incr(
+                RunUsage(
+                    requests=ru.requests,
+                    input_tokens=ru.input_tokens,
+                    output_tokens=ru.output_tokens,
+                    cache_read_tokens=ru.cache_read_tokens,
+                    cache_write_tokens=ru.cache_write_tokens,
+                )
+            )
+        self.searches += searches
+        self.restored_searches += searches
 
     def record(self, role: Role, usage: RunUsage) -> None:
         """Merge one completed run's usage into the role accumulator.
