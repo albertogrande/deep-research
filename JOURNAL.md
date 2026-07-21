@@ -10,6 +10,59 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 28 — 2026-07-21 — Fact-checking the "How it compares" table (reputation pass)
+
+Went back over the README's **How it compares** table with one rule: every cell must be backable
+to a source, or it comes out. The table had drifted into marketing, and several cells were wrong in
+the most damaging direction — claiming a competitor *lacks* a feature it actually ships. Method:
+four background research agents reading the **actual current source** (node/graph/config files, not
+READMEs, not memory) of gpt-researcher, langchain-ai/open_deep_research, and bytedance/deer-flow
+(both `main` and `main-1.x`), plus a final **adversarial** agent whose only job was to *disprove*
+our flagship row by finding a per-claim source-verification stage anywhere. It cloned all four at
+head (commits within the week) and came back empty — the claim holds.
+
+**Cells corrected (were claiming absence of a shipped feature):** compressed workspace and eval
+suite for gpt-researcher (`ContextCompressor`/`VectorstoreCompressor`; `evals/simple_evals` +
+`hallucination_eval`); eval suite for DeerFlow (`src/eval/` on 1.x); checkpoint/resume for DeerFlow
+(`deerflow --resume/--continue`). **Overstatements pulled back:** open_deep_research's editable-plan
+gate → `partial` (it clarifies but the brief isn't user-editable); offline CI → `❌` for both
+gpt-researcher (manual-dispatch, live-key-gated tests) and open_deep_research (only Claude-bot
+workflows). **Row removed:** citation numbering "code-owned vs model-written" — DeerFlow assembles
+citation numbers in code too (`src/citations/formatter.py`), so the differentiator was false.
+
+**Prose fix that matters most for trust:** the tagline claimed "eval numbers *published* instead of
+implied" while our own Known Limitations admit live numbers aren't published yet and the A/B
+placeholder is still empty. Reworded to "the eval harness in-repo so the numbers can be *measured*,
+not implied," and added an explicit "not every row is ours alone — resume, eval suites and
+compressed context are increasingly table stakes" line. A table that shows an honest mix (including
+Providers, where we're the *narrow* one) reads as more credible than an all-✅ column.
+
+**Two footnotes as pre-emptive defense.** (1) A dated "verified against default branch on
+2026-07-21" caveat + the DeerFlow branch split + gpt-researcher's MCP living in a separate repo.
+(2) A precise definition of *per-claim source re-verification*, specifically to disarm the
+name-collision landmine: gpt-researcher ships `multi_agents/agents/fact_checker.py`, which *sounds*
+like our verifier but reviews the whole assembled draft against in-memory notes — no source
+re-fetch, no per-claim verdict. Better to draw that distinction ourselves than have a skeptic
+"expose" it.
+
+**Own column re-verified in code**, since a false claim about ourselves is the worst outcome:
+dollar budget is `Budget.max_cost_usd` in USD (`deps.py`); the predictive gate really is predictive
+(`orchestrator.py:419` refuses the next wave when `WAVE_AFFORDABILITY_FACTOR * last_wave_cost`
+exceeds the remainder — *before* spending, distinct from the reactive `budget.checkpoint`);
+behavioral span evals genuinely run in offline CI (`ci.yml` runs `pytest --cov`, and
+`tests/test_behavior_evals.py`'s `HasMatchingSpan` checks are neither live-marked nor skipped);
+`--resume` is wired through `cli.py`. The surviving clean differentiators are three: per-claim
+re-verification, deterministic dollar budget + predictive gating, and behavioral evals in offline CI.
+
+**Limitation knowingly accepted:** absence claims about fast-moving repos are only true as of a
+date — the table says so rather than pretending otherwise. **Dev-ex note:** the adversarial
+"try to break our own strongest claim" agent was worth more than the three surveying agents combined
+— it's the pattern that catches the `fact_checker.py`-shaped objection before a reader does.
+**Cost:** research agents ran on web search/fetch; no eval or pipeline spend. Effectively **$0** to
+the project's LLM budget (documentation-only change; `docs/index.html` WIP left untouched).
+
+---
+
 ## Entry 27 — 2026-07-20 — DX one-pager, second pass: scannable severity (win/ask/blocker badges)
 
 Follow-up polish on `docs/index.html` (entry 26) after reviewing the rendered page. Three changes,

@@ -146,18 +146,32 @@ command in Claude Desktop / Claude Code:
 | | **deepresearch** | gpt-researcher | open_deep_research | DeerFlow |
 |---|---|---|---|---|
 | Per-claim source re-verification | **✅ dedicated stage** | ❌ | ❌ | ❌ |
-| Citation numbering | **code-owned** | model-written | model-written | model-written |
-| Compressed research workspace | ✅ | ❌ | ✅ | partial |
-| Editable plan gate / clarify | ✅ | partial | ✅ | ✅ |
-| Checkpoint / resume | ✅ | ❌ | ❌ | ❌ |
-| Deterministic $ budget + predictive gating | ✅ | ❌ | ❌ | ❌ |
-| Eval suite in-repo (citation accuracy, A/B) | ✅ | ❌ | partial | ❌ |
-| Offline CI (incl. behavioral span evals) | ✅ | partial | partial | partial |
+| Deterministic $ budget + predictive gating | **✅** | ❌ | ❌ | ❌ |
+| Offline CI incl. behavioral span evals | **✅** | ❌ | ❌ | partial |
+| Checkpoint / resume | ✅ | ❌ | ❌ | ✅ |
+| Editable plan gate / clarify | ✅ | partial | partial | ✅ |
+| Compressed research workspace | ✅ | ✅ | ✅ | partial |
+| Eval suite in-repo | ✅ | ✅ | partial | ✅ |
 | MCP server of itself | ✅ | ✅ | ❌ | ❌ |
 | Providers | Anthropic only (by design) | many | many | many |
 
-The bet this project makes: **verification and measurement beat breadth**. One provider,
-one stack, every claim checked, and eval numbers published instead of implied.
+<sub>Verified against each project's default branch on 2026-07-21 (fast-moving repos, so check
+before quoting). DeerFlow's classic deep-research pipeline (plan-review gate, code-assembled
+citations, `src/eval/`) lives on its `main-1.x` branch; the 2.0 `main` default is a broader
+agent harness. gpt-researcher's MCP server is a separate repo (`gptr-mcp`).</sub>
+
+<sub>*Per-claim source re-verification* means a live pipeline stage that re-fetches the source
+behind **each** claim and returns a per-claim supported/contradicted/unverifiable verdict. It is
+not a whole-draft consistency review (gpt-researcher's `multi_agents` `FactCheckerAgent` reviews
+the assembled draft against in-memory notes without re-fetching sources), nor an offline
+hallucination eval, nor consensus-across-sources reading. Those exist elsewhere; a per-claim
+re-fetch-and-adjudicate stage is what the ❌ marks the absence of.</sub>
+
+The bet this project makes: **verification and measurement beat breadth**. Not every row here
+is ours alone (resume, eval suites and compressed context are increasingly table stakes), but
+per-claim source re-verification, a deterministic dollar budget with predictive gating, and
+behavioral evals wired into offline CI are. One provider, one stack, every claim re-checked
+against its source, and the eval harness in-repo so the numbers can be measured, not implied.
 
 ## Evals
 
