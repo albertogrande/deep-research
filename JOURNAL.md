@@ -10,6 +10,31 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 30 — 2026-07-21 — One-pager, second editorial pass: reframe Priorities, uniform bullet structure
+
+Follow-up to Entry 29, all on `docs/index.html`. Two changes driven by the reader's eye.
+
+**Priorities reframed from directive to overview.** The section led "Where I'd start" with
+imperative items ("Cut… / Add… / Document…"), which reads as telling the Pydantic team what to do.
+Retitled to **"What would help most"** and rewrote every item as a neutral noun phrase (e.g.
+"`Agent.run(context=…)` for per-run validator data", "A retry knob on `gateway_provider`"). Same
+asks, no command voice. Also **split the bundled retry + `RunUsage`/`UsageLimits`-docs item into two**
+so each priority is a single ask with a single journal link, and trimmed every line so text + the
+"Entry N ↗" citation fit one line without wrapping.
+
+**One bullet structure across all sections.** Established the rule: **every feedback bullet is one
+crisp sentence — claim first, optional `:` elaboration, optional `(parenthetical)` — no bold
+lead-ins, no two-sentence bullets, no filler openers.** This meant un-bolding the four Agent
+Experience bullets (they were the only ones using `<strong>` theses) and folding their second
+sentence into a colon clause, plus cutting openers like "Gotcha:", "Minor", and "The find of the
+effort:". Deliberately did **not** flatten the section bullets into Priorities-style noun phrases —
+the detail (mechanism, `code` identifiers, "a real bug I hit") is the evidence a skeptical reader
+needs; terse works for the Priorities recap only because the detail lives in the sections above.
+The result is the intended two-layer read: badge + h2 + deck for skimmers, full-sentence bullets for
+readers who stop.
+
+**Cost:** $0 (doc-only, offline).
+
 ## Entry 29 — 2026-07-21 — DX one-pager, editorial + structure pass, and a journal-linked evidence trail
 
 A full editorial and structural pass over `docs/index.html` (the DX one-pager for the Pydantic

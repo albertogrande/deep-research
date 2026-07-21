@@ -209,12 +209,12 @@
     <h2>The core delivered</h2>
     <p class="lead">Type-safe agents end to end, routing kept in config, and three sharp edges worth filing.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Model-less agent singletons + per-run <code>model=</code> kept all routing in config.</span></li>
-      <li><span class="badge win">win</span><span>Generics carry output types end-to-end: one correct annotation fixed 45 of 51 type errors at once.</span></li>
+      <li><span class="badge win">win</span><span>Model-less singletons + per-run <code>model=</code> keep routing in config.</span></li>
+      <li><span class="badge win">win</span><span>Generics carry output types end-to-end: one annotation fixed 45 of 51 type errors.</span></li>
       <li><span class="badge win">win</span><span>Output validators + <code>ModelRetry</code> are the right home for semantic rules.</span></li>
-      <li><span class="badge gap">gap</span><span><code>TestModel</code> rejects built-in tools. The <code>native_tools=[]</code> override is the pattern for offline-testing tool agents, and it's undocumented. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>Shared <code>RunUsage</code> is also the limit surface: reusing one accumulator for accounting silently makes <code>UsageLimits</code> cumulative across sibling runs (a real bug I hit). <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>No per-run context reaches output validators: they see only <code>ctx.deps</code>, forcing a stash-on-mutable-Deps hack. An <code>Agent.run(context=…)</code> kwarg would fix it. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span><code>TestModel</code> rejects built-in tools; the undocumented <code>native_tools=[]</code> override is the fix for offline-testing tool agents. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Shared <code>RunUsage</code> is also the limit surface: reusing one accumulator silently makes <code>UsageLimits</code> cumulative across sibling runs (a real bug I hit). <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>No per-run context reaches output validators: they see only <code>ctx.deps</code>, forcing a stash-on-mutable-Deps hack that <code>Agent.run(context=…)</code> would fix. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></span></li>
     </ul>
   </section>
 
@@ -223,10 +223,10 @@
     <h2>Logfire did double duty</h2>
     <p class="lead">Zero config to stand up, then span queries turned it into an offline test tool.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Lit up with zero extra config beyond the token.</span></li>
+      <li><span class="badge win">win</span><span>Lit up with zero config beyond the token.</span></li>
       <li><span class="badge win">win</span><span><code>instrument_pydantic_ai</code> traced every call without HTTP-level noise.</span></li>
-      <li><span class="badge win">win</span><span>The find of the effort: <code>HasMatchingSpan</code> + <code>SpanQuery</code> assert pipeline shape from the span tree offline, in CI. Behavioral evals at $0.</span></li>
-      <li><span class="badge gap">gap</span><span>Gotcha: <code>logfire.configure()</code> must run before <code>dataset.evaluate</code> sets up recording, or you get <code>SpanTreeRecordingError</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-22--2026-07-20--evals-grow-teeth-fact-style-citation-accuracy-race-rubric-pairwise-span-evals">Entry 22 ↗</a></span></li>
+      <li><span class="badge win">win</span><span><code>HasMatchingSpan</code> + <code>SpanQuery</code> assert pipeline shape from the span tree, offline in CI: behavioral evals at $0.</span></li>
+      <li><span class="badge gap">gap</span><span><code>logfire.configure()</code> must run before <code>dataset.evaluate</code> sets up recording, or you get <code>SpanTreeRecordingError</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-22--2026-07-20--evals-grow-teeth-fact-style-citation-accuracy-race-rubric-pairwise-span-evals">Entry 22 ↗</a></span></li>
     </ul>
   </section>
 
@@ -235,10 +235,10 @@
     <h2>Evals came almost for free</h2>
     <p class="lead">Custom evaluators are just dataclasses; one runtime default is the only real trap.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Custom evaluators are just dataclasses returning dicts: the whole objective suite took about an hour.</span></li>
+      <li><span class="badge win">win</span><span>Custom evaluators are just dataclasses returning dicts: the whole objective suite took an hour.</span></li>
       <li><span class="badge win">win</span><span>Returning the task's typed <code>RunRecord</code> instead of scraping output paid off repeatedly.</span></li>
-      <li><span class="badge gap">gap</span><span>The <code>LLMJudge</code> OpenAI default is a trap: with no OpenAI key it crashes every eval run at runtime, not at construction. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>Minor docs drift: <code>Dataset(...)</code> requires <code>name=</code>; <code>result.usage</code> is an attribute, not a method. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>The <code>LLMJudge</code> OpenAI default is a trap: with no key it crashes every eval run at runtime, not construction. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Docs drift: <code>Dataset(...)</code> requires <code>name=</code>; <code>result.usage</code> is an attribute, not a method. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
     </ul>
   </section>
 
@@ -247,11 +247,11 @@
     <h2>The Gateway closed the open questions</h2>
     <p class="lead">Server tools ran end to end on one key, and first-party pricing retired my hacks.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Server-side web tools work through the Gateway (the headline unknown), verified end-to-end. It "just worked" with only its own key, no Anthropic-key juggling.</span></li>
-      <li><span class="badge win">win</span><span><code>genai-prices</code> (first-party, offline snapshot) priced every model including cache tokens and dated transitions, retiring two hand-rolled workarounds.</span></li>
+      <li><span class="badge win">win</span><span>Server-side web tools work through the Gateway (the headline unknown), verified end-to-end on its own key, no Anthropic-key juggling.</span></li>
+      <li><span class="badge win">win</span><span><code>genai-prices</code> (first-party, offline) priced every model including cache tokens and dated transitions, retiring two hand-rolled workarounds.</span></li>
       <li><span class="badge gap">gap</span><span>A gateway key without an encoded region breaks base-URL inference. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a></span></li>
       <li><span class="badge gap">gap</span><span>No <code>max_retries</code> knob on <code>gateway_provider</code>: I post-set <code>provider.client.max_retries</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>Model calls can't bill to a Claude Max subscription. An API key works fine for companies and solo devs alike; subscription billing would just cut cost for heavy personal use. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Model calls can't bill to a Claude Max subscription: an API key works fine for everyone, so this only cuts cost for heavy personal use. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></span></li>
     </ul>
   </section>
 
@@ -260,11 +260,11 @@
     <h2>The friction wasn't the code</h2>
     <p class="lead">Everything inside Claude Code flew; the web-console signup is where the weekend slowed.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>The default project came pre-created, a small thing that genuinely helped.</span></li>
-      <li><span class="badge gap">gap</span><span>Finding where to create a token was hard, and the credential taxonomy confused me: write token vs. read token vs. API key, with no signal for which one you actually need. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>Copying values by hand into Claude Code's env was painful on mobile: small targets, cross-app paste, easy to fumble. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
-      <li><span class="badge gap">gap</span><span>Fixes: cut time-to-token, label credentials by use case, make the console mobile-first, and ideally hand the token straight off into a dev environment. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
-      <li><span class="badge note">note</span><span>The velocity mismatch is the real story: inside Claude Code I move at 100×, then hit the web console and slow to a crawl. That context switch is where drop-off risk lives.</span></li>
+      <li><span class="badge win">win</span><span>The default project came pre-created, a small touch that helped.</span></li>
+      <li><span class="badge gap">gap</span><span>Finding where to create a token was hard, and the credential taxonomy confused me: write vs. read token vs. API key, with no signal for which you need. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Hand-copying values into Claude Code's env was painful on mobile: small targets, cross-app paste, easy to fumble. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Fixes: cut time-to-token, label credentials by use, make the console mobile-first, hand the token into the dev env. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge note">note</span><span>The velocity mismatch is the real story: 100× inside Claude Code, a crawl on the web console, and that switch is where drop-off risk lives.</span></li>
     </ul>
   </section>
 
@@ -273,10 +273,10 @@
     <h2>The stack builds well as an agent</h2>
     <p class="lead">Introspectable APIs and offline testing made it a delight; runtime-only traps were the pain.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span><strong>Offline-testability is the superpower.</strong> <code>TestModel</code>/<code>FunctionModel</code>, <code>ALLOW_MODEL_REQUESTS=False</code>, and key-free evals let me verify my own work deterministically across dozens of iterations without spending a cent.</span></li>
-      <li><span class="badge gap">gap</span><span><strong>The fix that generalizes:</strong> fail at construction, not first request, and put the escape hatch in the error message. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
-      <li><span class="badge note">note</span><span><strong>Runtime traps are what hurt.</strong> The costliest bugs failed at runtime, not construction: the <code>LLMJudge</code> default, the <code>RunUsage</code> coupling, and worst, a real env key silently making un-overridden agents network-capable (a hang I chased for a while).</span></li>
-      <li><span class="badge note">note</span><span><strong>Introspectable beats documented.</strong> Reading the installed package's signatures and source (<code>Agent.override</code>'s <code>native_tools=</code>, the <code>RunUsage</code> coupling) beat any tutorial, because training data and blog posts drift monthly.</span></li>
+      <li><span class="badge win">win</span><span>Offline-testability is the superpower: <code>TestModel</code>/<code>FunctionModel</code>, <code>ALLOW_MODEL_REQUESTS=False</code>, and key-free evals verified my work deterministically across dozens of iterations, $0 spent.</span></li>
+      <li><span class="badge gap">gap</span><span>The fix that generalizes: fail at construction, not first request, with the escape hatch in the error message. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge note">note</span><span>Runtime traps are what hurt: the <code>LLMJudge</code> default, the <code>RunUsage</code> coupling, and worst, a real env key silently making un-overridden agents network-capable (a hang I chased).</span></li>
+      <li><span class="badge note">note</span><span>Introspectable beats documented: reading the installed package's signatures and source beat any tutorial, since training data and blog posts drift monthly.</span></li>
     </ul>
   </section>
 
@@ -284,15 +284,16 @@
 
   <section>
     <p class="eyebrow">Priorities</p>
-    <h2>Where I'd start</h2>
+    <h2>What would help most</h2>
     <p class="lead">Ordered by adoption impact, from biggest lever to smallest polish.</p>
     <ol class="asks">
-      <li>Cut time-to-token, clarify credential types (read vs. write vs. API key), and make the console mobile-first: the biggest human friction. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></li>
-      <li>Add <code>Agent.run(context=…)</code> so per-run data reaches output validators. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></li>
-      <li>Default <code>LLMJudge</code> to the configured provider, and fail at construction, not runtime. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></li>
-      <li>Document <code>TestModel</code> + built-in tools (<code>native_tools=[]</code>), and put the hint in the error message. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></li>
-      <li>Add retry config to <code>gateway_provider</code>, and document the <code>RunUsage</code> / <code>UsageLimits</code> coupling. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a> <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></li>
-      <li>Support subscription billing (e.g. Claude Max) so heavy users spend less: a nice-to-have, not a blocker. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></li>
+      <li>Faster time-to-token, clearer credentials, mobile-first. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></li>
+      <li><code>Agent.run(context=…)</code> for per-run validator data. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></li>
+      <li><code>LLMJudge</code> on the configured provider, failing early. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></li>
+      <li>Docs for <code>TestModel</code> + built-in tools; hint in the error. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></li>
+      <li>A retry knob on <code>gateway_provider</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a></li>
+      <li>Docs for the <code>RunUsage</code>/<code>UsageLimits</code> coupling. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></li>
+      <li>Subscription billing (e.g. Claude Max). <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></li>
     </ol>
   </section>
 
