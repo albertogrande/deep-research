@@ -10,6 +10,55 @@ learned, what broke, what the stack made easy or hard, and what it cost.
 
 ---
 
+## Entry 29 — 2026-07-21 — DX one-pager, editorial + structure pass, and a journal-linked evidence trail
+
+A full editorial and structural pass over `docs/index.html` (the DX one-pager for the Pydantic
+team, written for Samuel Colvin as the reader). The session was less about code than about **making
+the page say one thing clearly and back every claim.**
+
+**Framing.** Settled the document's job explicitly first: it's an *adoption field report*, not
+separate "product" and "DX" feedback — a solo dev shipped a real agent on the whole stack in a
+weekend, here's the proof, the friction, and the prioritized asks. The through-line is DX/adoption;
+the API asks are evidence inside that story. The page now reads hook (question) → Verdict (answer) →
+evidence sections → Priorities (the payload), which is the right exec sandwich.
+
+**The claim correction that mattered most.** The old Verdict called subscription billing "the one
+true adoption blocker." That's wrong and it's the most damaging kind of wrong — overstated in our
+own favor. **Nothing actually blocked adoption: the whole build ran on a normal API key ($0.66).**
+Claude Max billing is a *cost* nice-to-have (companies and solo devs both bill the API), so it was
+downgraded from a `blocker` badge to a `gap`, moved out of the Pydantic AI section into the Gateway
+section (where billing actually lives), and dropped from Priorities #2 to last. The `blocker` badge
+category was removed entirely — with zero blockers, "I found no adoption blockers" is a stronger,
+honest message than a manufactured one.
+
+**Consistency work.** Every section normalized to one anatomy: `eyebrow → h2 → one-line deck →
+badge bullets`. All six evidence h2s rewritten to parallel subject-verb verdicts (killed a gerund
+and a mix of fragments). Badge taxonomy went `win / ask / blocker / note` → **`win / gap / note`**
+("ask" read as a demand pointed at the reader; "friction" was tried but too wide for the fixed 46px
+badge column, so "gap"). Chips are ordered win → gap → note everywhere. Voice unified to first
+person ("a bug I hit", not "we"). Removed every em dash by function (colon/period/comma/parens), not
+blind swap. Priorities items all made imperative, verb-first (Cut · Add · Default · Document · Add ·
+Support).
+
+**The journal became a linkable evidence base.** Added 20 muted "Entry N ↗" deep-links — one on
+every `gap` bullet and every priority — into the exact JOURNAL.md entry that discusses it. **GitHub
+heading anchors are the robust choice over line-anchors here because entries are prepended, so line
+numbers drift but title-slugs don't.** Gotcha worth recording: github-slugger turns ` — ` (space,
+em-dash, space) into a **double hyphen** `--` and drops `→`/`:`/`,`, so anchors look like
+`#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix`. Couldn't verify against
+GitHub's rendered HTML (the `/markdown` API doesn't inject heading anchors, and WebFetch strips ids),
+so I **replicated github-slugger locally and diffed every embedded anchor against the current
+headings — 0 invalid**. Mapping each gap to its entry was done by grepping the journal for the exact
+technical term (`native_tools`, `UsageLimits`, `SpanTreeRecordingError`…) and resolving the nearest
+preceding heading, not by guessing.
+
+**Limitations knowingly accepted.** The three Human Experience onboarding gaps all point to the same
+Entry 26 (honest — that's where the onboarding signal was recorded — but visually repetitive). The
+Priorities links duplicate the section links just above them. Both are one-line reversions if they
+read as over-cited.
+
+**Cost:** $0 (doc-only, offline; no model calls).
+
 ## Entry 28 — 2026-07-21 — Fact-checking the "How it compares" table (reputation pass)
 
 Went back over the README's **How it compares** table with one rule: every cell must be backable

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>A Weekend on the Pydantic Stack — DX &amp; Product Feedback</title>
-<meta name="description" content="Developer-experience &amp; product feedback for the Pydantic team, from building a deep-research agent on the full Pydantic stack (AI, Logfire, Evals, Gateway) — solo, on mobile, over a weekend through Claude Code.">
-<meta property="og:title" content="A Weekend on the Pydantic Stack — DX &amp; Product Feedback">
-<meta property="og:description" content="What worked, what didn't, and the top DX asks — distilled from a weekend building deepresearch on Pydantic AI, Logfire, Evals, and Gateway.">
+<title>A Weekend on the Pydantic Stack: DX &amp; Product Feedback</title>
+<meta name="description" content="Developer-experience &amp; product feedback for the Pydantic team, from building a deep-research agent on the full Pydantic stack (AI, Logfire, Evals, Gateway), solo, on mobile, over a weekend through Claude Code.">
+<meta property="og:title" content="A Weekend on the Pydantic Stack: DX &amp; Product Feedback">
+<meta property="og:description" content="What worked, what didn't, and the top DX asks, distilled from a weekend building deepresearch on Pydantic AI, Logfire, Evals, and Gateway.">
 <meta property="og:type" content="article">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,7 +30,7 @@
     --ask: #b26a00; --ask-ink: #8f5600; --ask-soft: #fbf0db;
     --blocker: #d92d20; --blocker-ink: #b3261e; --blocker-soft: #fce9e7; --on-blocker: #ffffff;
     --note-ink: #6c6472;
-    --maxw: 62ch;
+    --maxw: 68ch;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -70,10 +70,12 @@
     line-height: 1.62; font-size: 16px;
     -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
-  .wrap { max-width: 720px; margin: 0 auto; padding: clamp(18px, 4vw, 34px) clamp(18px, 5vw, 30px) 90px; }
+  .wrap { max-width: 784px; margin: 0 auto; padding: clamp(18px, 4vw, 34px) clamp(18px, 5vw, 30px) 90px; }
 
   a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid var(--accent-soft); transition: border-color .15s ease; }
   a:hover { border-bottom-color: var(--accent); }
+  a.ref { font-size: 0.8em; color: var(--muted); border-bottom: none; white-space: nowrap; margin-left: 3px; }
+  a.ref:hover { color: var(--accent-ink); border-bottom: none; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
   strong { font-weight: 600; }
 
@@ -112,7 +114,9 @@
   }
   .subtitle { font-size: clamp(1.02rem, 2.6vw, 1.18rem); color: var(--muted); margin: 0 0 22px; max-width: var(--maxw); text-wrap: pretty; }
 
-  .lead { font-size: 1.04rem; margin: 0 0 26px; max-width: var(--maxw); }
+  .lead { font-size: 1.04rem; margin: 0 0 12px; max-width: var(--maxw); }
+  .source-line { font-size: 0.9rem; color: var(--muted); margin: 0 0 30px; }
+  .source-line code { font-size: 0.82em; }
 
   /* Verdict callout */
   .callout {
@@ -137,7 +141,7 @@
 
   /* Badged feedback list */
   ul.feedback { list-style: none; margin: 0; padding: 0; max-width: var(--maxw); }
-  ul.feedback > li { display: grid; grid-template-columns: 78px 1fr; gap: 13px; align-items: baseline; margin-bottom: 12px; }
+  ul.feedback > li { display: grid; grid-template-columns: 46px 1fr; gap: 10px; align-items: baseline; margin-bottom: 12px; }
 
   .badge {
     font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.6rem;
@@ -146,7 +150,7 @@
     white-space: nowrap; justify-self: start;
   }
   .badge.win { color: var(--win-ink); background: var(--win-soft); border-color: color-mix(in srgb, var(--win) 42%, transparent); }
-  .badge.ask { color: var(--ask-ink); background: var(--ask-soft); border-color: color-mix(in srgb, var(--ask) 42%, transparent); }
+  .badge.gap { color: var(--ask-ink); background: var(--ask-soft); border-color: color-mix(in srgb, var(--ask) 42%, transparent); }
   .badge.blocker { color: var(--on-blocker); background: var(--blocker); }
   .badge.note { color: var(--note-ink); background: transparent; border-color: var(--border); }
 
@@ -185,90 +189,94 @@
   <header>
     <p class="eyebrow">Builder's report · July 2026</p>
     <h1>A Weekend on the Pydantic Stack</h1>
-    <p class="subtitle">DX &amp; product feedback from building a deep-research agent — solo, on mobile, through a Claude Code agent.</p>
-    <p class="lead">A dev spent a weekend building <code>deepresearch</code> — a wave-based, claim-verifying research agent — with one real question: could the full Pydantic stack (AI, Logfire, Evals, Gateway) be a production setup? Constraints were deliberately tight: one Anthropic key, one Logfire account, no other paid services, and a builder journal kept every session to capture the experience.</p>
+    <p class="lead">The weekend had one question: could I build a real research agent on the full Pydantic stack (AI, Logfire, Evals, Gateway), solo, on mobile, with Claude Code? So I built <code>deepresearch</code>, a wave-based, claim-verifying agent, to find out.</p>
+    <p class="source-line">Code and full journal: <a href="https://github.com/albertogrande/deep-research">github.com/albertogrande/deep-research</a></p>
   </header>
 
   <div class="callout">
     <p class="eyebrow">Verdict</p>
-    <p>The stack cleared the bar. Every prod-critical unknown got a yes — server tools work through the Gateway, costs are real and small (~$0.66 live total; the entire 10-phase hardening effort ran at $0), Logfire needed zero config, and the whole thing is offline-testable. The one true adoption blocker is subscription billing; everything else below is papercuts and onboarding polish.</p>
+    <p>Yes, on every count that mattered: server tools work through the Gateway, costs are real and small (~$0.66 live total, the 10-phase hardening effort at $0), Logfire needs zero config, and the whole thing is offline-testable. Nothing here blocks adoption; the whole build ran on a normal API key. What's left is papercuts, onboarding polish, and one nice-to-have: subscription billing, to spend even less.</p>
   </div>
 
   <div class="legend">
     <span class="key"><span class="badge win">win</span> what worked</span>
-    <span class="key"><span class="badge ask">ask</span> a fix or doc gap</span>
-    <span class="key"><span class="badge blocker">blocker</span> adoption-critical</span>
+    <span class="key"><span class="badge gap">gap</span> a fix or missing doc</span>
     <span class="key"><span class="badge note">note</span> observation</span>
   </div>
 
   <section>
     <p class="eyebrow">Pydantic AI</p>
     <h2>The core delivered</h2>
+    <p class="lead">Type-safe agents end to end, routing kept in config, and three sharp edges worth filing.</p>
     <ul class="feedback">
       <li><span class="badge win">win</span><span>Model-less agent singletons + per-run <code>model=</code> kept all routing in config.</span></li>
-      <li><span class="badge win">win</span><span>Generics carry output types end-to-end — one correct annotation fixed 45 of 51 type errors at once.</span></li>
+      <li><span class="badge win">win</span><span>Generics carry output types end-to-end: one correct annotation fixed 45 of 51 type errors at once.</span></li>
       <li><span class="badge win">win</span><span>Output validators + <code>ModelRetry</code> are the right home for semantic rules.</span></li>
-      <li><span class="badge ask">ask</span><span><code>TestModel</code> rejects built-in tools — the <code>native_tools=[]</code> override is THE pattern for offline-testing tool agents, and it's undocumented.</span></li>
-      <li><span class="badge ask">ask</span><span>Shared <code>RunUsage</code> is also the limit surface — reusing one accumulator for accounting silently makes <code>UsageLimits</code> cumulative across sibling runs (a real bug we hit).</span></li>
-      <li><span class="badge ask">ask</span><span>No per-run context to output validators — they see only <code>ctx.deps</code>, forcing a stash-on-mutable-Deps hack; an <code>Agent.run(context=…)</code> kwarg would fix it.</span></li>
-      <li><span class="badge blocker">blocker</span><span>Can't bill to a Claude Max subscription — shaped the entire project's economics.</span></li>
+      <li><span class="badge gap">gap</span><span><code>TestModel</code> rejects built-in tools. The <code>native_tools=[]</code> override is the pattern for offline-testing tool agents, and it's undocumented. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Shared <code>RunUsage</code> is also the limit surface: reusing one accumulator for accounting silently makes <code>UsageLimits</code> cumulative across sibling runs (a real bug I hit). <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>No per-run context reaches output validators: they see only <code>ctx.deps</code>, forcing a stash-on-mutable-Deps hack. An <code>Agent.run(context=…)</code> kwarg would fix it. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></span></li>
     </ul>
   </section>
 
   <section>
-    <p class="eyebrow">Logfire</p>
-    <h2>Zero-config, and a testing superpower</h2>
+    <p class="eyebrow">Pydantic Logfire</p>
+    <h2>Logfire did double duty</h2>
+    <p class="lead">Zero config to stand up, then span queries turned it into an offline test tool.</p>
     <ul class="feedback">
       <li><span class="badge win">win</span><span>Lit up with zero extra config beyond the token.</span></li>
       <li><span class="badge win">win</span><span><code>instrument_pydantic_ai</code> traced every call without HTTP-level noise.</span></li>
-      <li><span class="badge win">win</span><span>The find of the effort: <code>HasMatchingSpan</code> + <code>SpanQuery</code> assert pipeline shape from the span tree offline, in CI — behavioral evals at $0.</span></li>
-      <li><span class="badge ask">ask</span><span>Gotcha: <code>logfire.configure()</code> must run before <code>dataset.evaluate</code> sets up recording, or you get <code>SpanTreeRecordingError</code>.</span></li>
+      <li><span class="badge win">win</span><span>The find of the effort: <code>HasMatchingSpan</code> + <code>SpanQuery</code> assert pipeline shape from the span tree offline, in CI. Behavioral evals at $0.</span></li>
+      <li><span class="badge gap">gap</span><span>Gotcha: <code>logfire.configure()</code> must run before <code>dataset.evaluate</code> sets up recording, or you get <code>SpanTreeRecordingError</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-22--2026-07-20--evals-grow-teeth-fact-style-citation-accuracy-race-rubric-pairwise-span-evals">Entry 22 ↗</a></span></li>
     </ul>
   </section>
 
   <section>
     <p class="eyebrow">Pydantic Evals</p>
-    <h2>Near-zero friction, one sharp edge</h2>
+    <h2>Evals came almost for free</h2>
+    <p class="lead">Custom evaluators are just dataclasses; one runtime default is the only real trap.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Custom evaluators are just dataclasses returning dicts — the whole objective suite was about an hour.</span></li>
+      <li><span class="badge win">win</span><span>Custom evaluators are just dataclasses returning dicts: the whole objective suite took about an hour.</span></li>
       <li><span class="badge win">win</span><span>Returning the task's typed <code>RunRecord</code> instead of scraping output paid off repeatedly.</span></li>
-      <li><span class="badge ask">ask</span><span>The <code>LLMJudge</code> OpenAI default is a runtime trap — with no OpenAI key it crashes every eval run, at runtime, not construction.</span></li>
-      <li><span class="badge ask">ask</span><span>Minor docs drift: <code>Dataset(...)</code> requires <code>name=</code>; <code>result.usage</code> is an attribute, not a method.</span></li>
+      <li><span class="badge gap">gap</span><span>The <code>LLMJudge</code> OpenAI default is a trap: with no OpenAI key it crashes every eval run at runtime, not at construction. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Minor docs drift: <code>Dataset(...)</code> requires <code>name=</code>; <code>result.usage</code> is an attribute, not a method. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></span></li>
     </ul>
   </section>
 
   <section>
-    <p class="eyebrow">Gateway</p>
-    <h2>The open questions, closed</h2>
+    <p class="eyebrow">Pydantic AI Gateway</p>
+    <h2>The Gateway closed the open questions</h2>
+    <p class="lead">Server tools ran end to end on one key, and first-party pricing retired my hacks.</p>
     <ul class="feedback">
-      <li><span class="badge win">win</span><span>Server-side web tools work through the Gateway (the headline unknown), verified end-to-end — it "just worked" with only its own key, no Anthropic-key juggling.</span></li>
-      <li><span class="badge win">win</span><span><code>genai-prices</code> (first-party, offline snapshot) priced every model including cache tokens and dated transitions — retired two hand-rolled workarounds.</span></li>
-      <li><span class="badge ask">ask</span><span>A gateway key without an encoded region breaks base-URL inference.</span></li>
-      <li><span class="badge ask">ask</span><span>No <code>max_retries</code> knob on <code>gateway_provider</code> — we post-set <code>provider.client.max_retries</code>.</span></li>
+      <li><span class="badge win">win</span><span>Server-side web tools work through the Gateway (the headline unknown), verified end-to-end. It "just worked" with only its own key, no Anthropic-key juggling.</span></li>
+      <li><span class="badge win">win</span><span><code>genai-prices</code> (first-party, offline snapshot) priced every model including cache tokens and dated transitions, retiring two hand-rolled workarounds.</span></li>
+      <li><span class="badge gap">gap</span><span>A gateway key without an encoded region breaks base-URL inference. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>No <code>max_retries</code> knob on <code>gateway_provider</code>: I post-set <code>provider.client.max_retries</code>. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Model calls can't bill to a Claude Max subscription. An API key works fine for companies and solo devs alike; subscription billing would just cut cost for heavy personal use. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></span></li>
     </ul>
   </section>
 
   <section>
-    <p class="eyebrow">Onboarding · human DX</p>
+    <p class="eyebrow">Human Experience</p>
     <h2>The friction wasn't the code</h2>
-    <p class="lead">My only task outside Claude Code was signing up on the Pydantic web console — and that's exactly where the weekend slowed down. The default project came pre-created, genuinely helpful; everything after it had drag.</p>
+    <p class="lead">Everything inside Claude Code flew; the web-console signup is where the weekend slowed.</p>
     <ul class="feedback">
-      <li><span class="badge ask">ask</span><span>Finding where to create a token was hard, and the credential taxonomy confuses — write token vs. read token vs. API key, with no signal for which one you actually need.</span></li>
-      <li><span class="badge ask">ask</span><span>Copying values by hand into Claude Code's env was painful on mobile — small targets, cross-app paste, easy to fumble.</span></li>
-      <li><span class="badge note">note</span><span>The velocity mismatch is the real story: inside Claude Code I move at 100×, then hit the web console and slow to a crawl — that context-switch is where drop-off risk lives.</span></li>
-      <li><span class="badge ask">ask</span><span>Fixes: cut time-to-token, label credentials by use case, make the console mobile-first — ideally a smoother token handoff straight into a dev environment.</span></li>
+      <li><span class="badge win">win</span><span>The default project came pre-created, a small thing that genuinely helped.</span></li>
+      <li><span class="badge gap">gap</span><span>Finding where to create a token was hard, and the credential taxonomy confused me: write token vs. read token vs. API key, with no signal for which one you actually need. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Copying values by hand into Claude Code's env was painful on mobile: small targets, cross-app paste, easy to fumble. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge gap">gap</span><span>Fixes: cut time-to-token, label credentials by use case, make the console mobile-first, and ideally hand the token straight off into a dev environment. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge note">note</span><span>The velocity mismatch is the real story: inside Claude Code I move at 100×, then hit the web console and slow to a crawl. That context switch is where drop-off risk lives.</span></li>
     </ul>
   </section>
 
   <section>
-    <p class="eyebrow">Agent DX · Claude's own account</p>
-    <h2>Building it as an agent</h2>
-    <p class="lead">Two properties of the stack made it genuinely good to build on as an agent, and one class of bug made it hard.</p>
+    <p class="eyebrow">Agent Experience</p>
+    <h2>The stack builds well as an agent</h2>
+    <p class="lead">Introspectable APIs and offline testing made it a delight; runtime-only traps were the pain.</p>
     <ul class="feedback">
-      <li><span class="badge note">note</span><span><strong>Introspectable beats documented.</strong> Reading the installed package's signatures and source (<code>Agent.override</code>'s <code>native_tools=</code>, the <code>RunUsage</code> coupling) beat any tutorial, because training data and blog posts drift monthly.</span></li>
       <li><span class="badge win">win</span><span><strong>Offline-testability is the superpower.</strong> <code>TestModel</code>/<code>FunctionModel</code>, <code>ALLOW_MODEL_REQUESTS=False</code>, and key-free evals let me verify my own work deterministically across dozens of iterations without spending a cent.</span></li>
-      <li><span class="badge note">note</span><span><strong>Runtime traps are what hurt.</strong> The costliest bugs failed at runtime, not construction — the <code>LLMJudge</code> default, the <code>RunUsage</code> coupling, and worst, a real env key silently making un-overridden agents network-capable (a hang I chased for a while).</span></li>
-      <li><span class="badge ask">ask</span><span><strong>The generalizable ask:</strong> fail at construction, not first request, and put the escape hatch in the error message.</span></li>
+      <li><span class="badge gap">gap</span><span><strong>The fix that generalizes:</strong> fail at construction, not first request, and put the escape hatch in the error message. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></span></li>
+      <li><span class="badge note">note</span><span><strong>Runtime traps are what hurt.</strong> The costliest bugs failed at runtime, not construction: the <code>LLMJudge</code> default, the <code>RunUsage</code> coupling, and worst, a real env key silently making un-overridden agents network-capable (a hang I chased for a while).</span></li>
+      <li><span class="badge note">note</span><span><strong>Introspectable beats documented.</strong> Reading the installed package's signatures and source (<code>Agent.override</code>'s <code>native_tools=</code>, the <code>RunUsage</code> coupling) beat any tutorial, because training data and blog posts drift monthly.</span></li>
     </ul>
   </section>
 
@@ -276,19 +284,20 @@
 
   <section>
     <p class="eyebrow">Priorities</p>
-    <h2>Top DX asks</h2>
+    <h2>Where I'd start</h2>
+    <p class="lead">Ordered by adoption impact, from biggest lever to smallest polish.</p>
     <ol class="asks">
-      <li>Faster time-to-token, clearer credential types (read vs. write vs. API key), mobile-first console — the biggest human friction.</li>
-      <li>Claude Max / subscription billing — the one true adoption blocker.</li>
-      <li><code>Agent.run(context=…)</code> for per-run data into output validators.</li>
-      <li><code>LLMJudge</code> should default to the configured provider and fail at construction, not runtime.</li>
-      <li>Document <code>TestModel</code> + built-in tools (<code>native_tools=[]</code>) — and put the hint in the error message.</li>
-      <li>Retry config on <code>gateway_provider</code>; document the <code>RunUsage</code> / <code>UsageLimits</code> coupling.</li>
+      <li>Cut time-to-token, clarify credential types (read vs. write vs. API key), and make the console mobile-first: the biggest human friction. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-26--2026-07-20--a-shareable-dx-one-pager-for-the-pydantic-team-github-pages">Entry 26 ↗</a></li>
+      <li>Add <code>Agent.run(context=…)</code> so per-run data reaches output validators. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-5--2026-07-18--phase-4-synthesis--models-write-prose-code-owns-the-numbers">Entry 5 ↗</a></li>
+      <li>Default <code>LLMJudge</code> to the configured provider, and fail at construction, not runtime. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-7--2026-07-18--phase-6-evals-and-the-v1-retrospective">Entry 7 ↗</a></li>
+      <li>Document <code>TestModel</code> + built-in tools (<code>native_tools=[]</code>), and put the hint in the error message. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-2--2026-07-18--phase-1-plan--research-pipeline-and-testing-agents-without-keys">Entry 2 ↗</a></li>
+      <li>Add retry config to <code>gateway_provider</code>, and document the <code>RunUsage</code> / <code>UsageLimits</code> coupling. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-17--2026-07-19--model-layer-prompt-caching-adaptive-thinking-transport-retries">Entry 17 ↗</a> <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-9--2026-07-19--code-review-a-real-usagelimits-bug-and-the-fix">Entry 9 ↗</a></li>
+      <li>Support subscription billing (e.g. Claude Max) so heavy users spend less: a nice-to-have, not a blocker. <a class="ref" href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md#entry-0--2026-07-18--origin-story-how-this-project-started">Entry 0 ↗</a></li>
     </ol>
   </section>
 
   <footer>
-    <p>Distilled from the deepresearch <a href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md">Builder Journal</a> — 25 entries across the build, one appended per session (hook-enforced). Built solo through Claude Code; the <em>Agent DX</em> section is Claude's own account of the experience.</p>
+    <p>Distilled from the deepresearch <a href="https://github.com/albertogrande/deep-research/blob/main/JOURNAL.md">Builder Journal</a>: 25 entries across the build.</p>
     <p><a href="https://github.com/albertogrande/deep-research">github.com/albertogrande/deep-research</a></p>
   </footer>
 
